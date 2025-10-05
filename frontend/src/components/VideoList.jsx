@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { getVideos } from '../services/api';
+import { getVideos, refreshVideoUrl } from '../services/api';
 
 export default function VideoList({ refreshTrigger }) {
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [refreshingUrls, setRefreshingUrls] = useState(new Set());
 
   useEffect(() => {
     fetchVideos();
@@ -22,6 +23,32 @@ export default function VideoList({ refreshTrigger }) {
       console.error('Error fetching videos:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRefreshUrl = async (videoId) => {
+    setRefreshingUrls(prev => new Set(prev).add(videoId));
+
+    try {
+      const result = await refreshVideoUrl(videoId);
+
+      // Update the video in the list with new URL
+      setVideos(prevVideos =>
+        prevVideos.map(video =>
+          video.id === videoId
+            ? { ...video, videoUrl: result.videoUrl }
+            : video
+        )
+      );
+    } catch (err) {
+      console.error('Error refreshing URL:', err);
+      alert(err.message || 'Failed to refresh URL');
+    } finally {
+      setRefreshingUrls(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(videoId);
+        return newSet;
+      });
     }
   };
 
@@ -78,23 +105,34 @@ export default function VideoList({ refreshTrigger }) {
                 </div>
               </div>
 
-              {video.status === 'completed' && video.s3Url && (
+              {video.status === 'completed' && (
                 <div className="video-actions">
-                  <a
-                    href={video.s3Url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="view-btn"
+                  {video.videoUrl ? (
+                    <>
+                      <a
+                        href={video.videoUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="view-btn"
+                      >
+                        View Video
+                      </a>
+                      <a
+                        href={video.videoUrl}
+                        download
+                        className="download-btn"
+                      >
+                        Download
+                      </a>
+                    </>
+                  ) : null}
+                  <button
+                    onClick={() => handleRefreshUrl(video.id)}
+                    disabled={refreshingUrls.has(video.id)}
+                    className="refresh-url-btn"
                   >
-                    View Video
-                  </a>
-                  <a
-                    href={video.s3Url}
-                    download
-                    className="download-btn"
-                  >
-                    Download
-                  </a>
+                    {refreshingUrls.has(video.id) ? 'Refreshing...' : 'Refresh URL'}
+                  </button>
                 </div>
               )}
 

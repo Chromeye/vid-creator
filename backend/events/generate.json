@@ -1,0 +1,9 @@
+{
+  "httpMethod": "POST",
+  "path": "/generate",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\"prompt\": \"A cat walking on a sunny beach\", \"image\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==\"}",
+  "isBase64Encoded": false
+}

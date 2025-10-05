@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 
 export default function VideoUploadForm({ onSubmit }) {
   const [prompt, setPrompt] = useState('');
@@ -6,6 +6,8 @@ export default function VideoUploadForm({ onSubmit }) {
   const [preview, setPreview] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  const formRef = useRef(null);
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
@@ -54,6 +56,9 @@ export default function VideoUploadForm({ onSubmit }) {
       setError(err.message || 'Failed to submit request');
     } finally {
       setIsSubmitting(false);
+      if (formRef.current) {
+        formRef.current.reset();
+      }
     }
   };
 
@@ -61,7 +66,7 @@ export default function VideoUploadForm({ onSubmit }) {
     <div className="upload-form">
       <h2>Generate Video with Gemini Veo 3</h2>
 
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} ref={formRef}>
         <div className="form-group">
           <label htmlFor="prompt">Prompt:</label>
           <textarea

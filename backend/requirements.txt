@@ -1,0 +1,11 @@
+# AWS SDK
+boto3>=1.28.0
+
+# Google Gemini API
+google-generativeai>=0.3.0
+
+# HTTP and data handling
+requests>=2.31.0
+
+# Image processing (if needed)
+Pillow>=10.0.0

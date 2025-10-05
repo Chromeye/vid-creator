@@ -182,8 +182,7 @@ body {
 }
 
 button {
-  width: 100%;
-  padding: 0.875rem 1.5rem;
+  padding: 0.625rem 1rem;
   background-color: var(--primary-color);
   color: white;
   border: none;
@@ -195,11 +194,7 @@ button {
 }
 
 button:hover:not(:disabled) {
-  background-color: #3367d6;
-}
-
-button:active:not(:disabled) {
-  transform: translateY(0);
+  background-color: var(--secondary-color)
 }
 
 button:disabled {
@@ -301,7 +296,8 @@ button:disabled {
 }
 
 .view-btn,
-.download-btn {
+.download-btn,
+.refresh-url-btn {
   flex: 1;
   padding: 0.625rem 1rem;
   text-align: center;
@@ -310,26 +306,16 @@ button:disabled {
   font-size: 0.9rem;
   font-weight: 500;
   transition: all 0.2s;
-}
-
-.view-btn {
   background-color: var(--primary-color);
   color: white;
 }
 
-.view-btn:hover {
-  background-color: #3367d6;
+.view-btn:hover,
+.download-btn:hover,
+.refresh-url-btn:hover {
+  background-color: var(--secondary-color)
 }
 
-.download-btn {
-  background-color: var(--background);
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
-}
-
-.download-btn:hover {
-  background-color: var(--border-color);
-}
 
 .processing-indicator {
   display: flex;

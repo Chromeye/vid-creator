@@ -1,0 +1,6 @@
+{
+  "httpMethod": "GET",
+  "path": "/videos",
+  "headers": {},
+  "body": null
+}

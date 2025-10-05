@@ -1,13 +1,31 @@
 const API_URL = import.meta.env.VITE_API_URL || 'YOUR_LAMBDA_FUNCTION_URL';
+const API_KEY = import.meta.env.VITE_API_KEY;
+
+const getHeaders = () => {
+  const headers = {
+    'x-api-key': API_KEY,
+  };
+  return headers;
+};
 
 export const generateVideo = async ({ prompt, image }) => {
-  const formData = new FormData();
-  formData.append('prompt', prompt);
-  formData.append('image', image);
+  // Convert image file to base64
+  const imageBase64 = await new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.readAsDataURL(image);
+  });
 
   const response = await fetch(`${API_URL}/generate`, {
     method: 'POST',
-    body: formData,
+    headers: {
+      ...getHeaders(),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      prompt,
+      image: imageBase64,
+    }),
   });
 
   if (!response.ok) {
@@ -19,7 +37,9 @@ export const generateVideo = async ({ prompt, image }) => {
 };
 
 export const getVideos = async () => {
-  const response = await fetch(`${API_URL}/videos`);
+  const response = await fetch(`${API_URL}/videos`, {
+    headers: getHeaders(),
+  });
 
   if (!response.ok) {
     throw new Error('Failed to fetch videos');
@@ -29,10 +49,26 @@ export const getVideos = async () => {
 };
 
 export const getVideoStatus = async (videoId) => {
-  const response = await fetch(`${API_URL}/videos/${videoId}`);
+  const response = await fetch(`${API_URL}/videos/${videoId}`, {
+    headers: getHeaders(),
+  });
 
   if (!response.ok) {
     throw new Error('Failed to fetch video status');
+  }
+
+  return response.json();
+};
+
+export const refreshVideoUrl = async (videoId) => {
+  const response = await fetch(`${API_URL}/videos/${videoId}/refresh-url`, {
+    method: 'POST',
+    headers: getHeaders(),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(error.error || 'Failed to refresh video URL');
   }
 
   return response.json();

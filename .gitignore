@@ -18,6 +18,9 @@ build/
 .env.*.local
 *.local
 
+# Test Environments
+env.json
+
 # Logs
 logs
 *.log

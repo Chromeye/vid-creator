@@ -1,0 +1,9 @@
+{
+  "httpMethod": "GET",
+  "path": "/videos/test-video-id-123",
+  "pathParameters": {
+    "videoId": "test-video-id-123"
+  },
+  "headers": {},
+  "body": null
+}

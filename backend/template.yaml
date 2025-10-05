@@ -1,0 +1,212 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Video Generator Backend - API Gateway + Lambda + S3
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - prod
+    Description: Environment name
+
+  GeminiApiKey:
+    Type: String
+    NoEcho: true
+    Description: Google Gemini API Key
+
+Globals:
+  Function:
+    Timeout: 300
+    MemorySize: 1024
+    Runtime: python3.12
+    Environment:
+      Variables:
+        ENVIRONMENT: !Ref Environment
+        VIDEOS_BUCKET: !Ref VideosBucket
+        GEMINI_API_KEY: !Ref GeminiApiKey
+
+Resources:
+  # S3 Bucket for storing generated videos (private, accessed via signed URLs)
+  VideosBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${AWS::StackName}-videos-${Environment}'
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins:
+              - '*'
+            AllowedMethods:
+              - GET
+              - HEAD
+            AllowedHeaders:
+              - '*'
+            MaxAge: 3000
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # DynamoDB Table for video metadata
+  VideosTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-videos-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: N
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: CreatedAtIndex
+          KeySchema:
+            - AttributeName: createdAt
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  # Lambda Function for video generation
+  VideoGeneratorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-generator-${Environment}'
+      CodeUri: ./src
+      Handler: handler.lambda_handler
+      Environment:
+        Variables:
+          VIDEOS_TABLE: !Ref VideosTable
+          POLLER_FUNCTION_NAME: !Ref VideoPollerFunction
+          USE_MOCK_GEMINI: "false"
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref VideosBucket
+        - DynamoDBCrudPolicy:
+            TableName: !Ref VideosTable
+        - LambdaInvokePolicy:
+            FunctionName: !Ref VideoPollerFunction
+      Events:
+        GenerateVideo:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /generate
+            Method: POST
+            Auth:
+              ApiKeyRequired: true
+        GetVideos:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /videos
+            Method: GET
+            Auth:
+              ApiKeyRequired: true
+        GetVideoStatus:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /videos/{videoId}
+            Method: GET
+            Auth:
+              ApiKeyRequired: true
+        RefreshVideoUrl:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /videos/{videoId}/refresh-url
+            Method: POST
+            Auth:
+              ApiKeyRequired: true
+
+  # Lambda Function for polling Gemini job status
+  VideoPollerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-poller-${Environment}'
+      CodeUri: ./src
+      Handler: poller.lambda_handler
+      Timeout: 900  # 15 minutes max for polling
+      Environment:
+        Variables:
+          VIDEOS_TABLE: !Ref VideosTable
+          USE_MOCK_GEMINI: "false"
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref VideosBucket
+        - DynamoDBCrudPolicy:
+            TableName: !Ref VideosTable
+
+  # API Gateway
+  ApiGateway:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub '${AWS::StackName}-api-${Environment}'
+      StageName: !Ref Environment
+      Cors:
+        AllowOrigin: "'*'"
+        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+        AllowMethods: "'GET,POST,OPTIONS'"
+        MaxAge: "'600'"
+
+  # API Key
+  ApiKey:
+    Type: AWS::ApiGateway::ApiKey
+    Properties:
+      Name: !Sub '${AWS::StackName}-api-key-${Environment}'
+      Enabled: true
+
+  # Usage Plan
+  UsagePlan:
+    Type: AWS::ApiGateway::UsagePlan
+    DependsOn: ApiGateway
+    Properties:
+      UsagePlanName: !Sub '${AWS::StackName}-usage-plan-${Environment}'
+      ApiStages:
+        - ApiId: !Ref ApiGateway
+          Stage: !Ref Environment
+      Throttle:
+        BurstLimit: 10
+        RateLimit: 5
+
+  # Link API Key to Usage Plan
+  UsagePlanKey:
+    Type: AWS::ApiGateway::UsagePlanKey
+    Properties:
+      KeyId: !Ref ApiKey
+      KeyType: API_KEY
+      UsagePlanId: !Ref UsagePlan
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway endpoint URL
+    Value: !Sub 'https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+    Export:
+      Name: !Sub '${AWS::StackName}-ApiUrl'
+
+  VideosBucketName:
+    Description: S3 bucket name for videos
+    Value: !Ref VideosBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-VideosBucket'
+
+  VideosTableName:
+    Description: DynamoDB table name for video metadata
+    Value: !Ref VideosTable
+    Export:
+      Name: !Sub '${AWS::StackName}-VideosTable'
+
+  FunctionArn:
+    Description: Lambda Function ARN
+    Value: !GetAtt VideoGeneratorFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-FunctionArn'
+
+  ApiKeyId:
+    Description: API Key ID (use 'aws apigateway get-api-key --api-key <ID> --include-value' to get the key)
+    Value: !Ref ApiKey

@@ -28,6 +28,7 @@ export const VideoViewer = ({ id, onClose }) => {
     setVideoDetails(null);
     onClose();
   });
+  console.log('Video details:', videoDetails);
   return (
     <div className='video-viewer-overlay'>
       <div className='video-viewer-content' ref={contentBoxRef}>

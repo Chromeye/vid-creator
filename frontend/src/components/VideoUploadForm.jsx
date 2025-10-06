@@ -39,7 +39,7 @@ export default function VideoUploadForm({ onSubmit }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!prompt || !image) {
+    if (!context.data.prompt || !image) {
       setError('Please provide both a prompt and an image');
       return;
     }
@@ -48,7 +48,7 @@ export default function VideoUploadForm({ onSubmit }) {
     setError('');
 
     try {
-      await onSubmit({ prompt, image });
+      await onSubmit({ prompt: context.data.prompt, image });
       // Reset form after successful submission
       context.updateValue('prompt', '');
       setImage(null);

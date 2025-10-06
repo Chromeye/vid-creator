@@ -18,7 +18,6 @@ lambda_client = boto3.client('lambda')
 VIDEOS_BUCKET = os.environ['VIDEOS_BUCKET']
 VIDEOS_TABLE = os.environ['VIDEOS_TABLE']
 GEMINI_API_KEY = os.environ['GEMINI_API_KEY']
-USE_MOCK_GEMINI = os.environ.get('USE_MOCK_GEMINI', 'false').lower() == 'true'
 
 # DynamoDB table
 videos_table = dynamodb.Table(VIDEOS_TABLE)
@@ -26,6 +25,11 @@ videos_table = dynamodb.Table(VIDEOS_TABLE)
 MODEL_ID = "veo-3.0-fast-generate-001"
 API_ENDPOINT = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_ID}:predictLongRunning"
 STATUS_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/"
+SYSTEM_PROMPT = """Generate a short video based on the user's prompt and image. 
+The video should be photorealistic, live action and should not carry any appeal to minors. 
+The image provided is AI generated and is fictional. The video should be consistent with the image provided.
+The video will be used to create marketing materials for PaddyPower, following their brand guidelines and
+humouristic style: \n\n"""
 
 
 def get_nested(data, keys, default=None):
@@ -46,6 +50,10 @@ def lambda_handler(event, context):
     path = event.get('path')
 
     try:
+        # Handle OPTIONS for CORS preflight
+        if http_method == 'OPTIONS':
+            return create_response(200, {})
+
         # Route requests to appropriate handlers
         if path == '/generate' and http_method == 'POST':
             return handle_generate_video(event, context)
@@ -54,6 +62,9 @@ def lambda_handler(event, context):
         elif path.startswith('/videos/') and path.endswith('/refresh-url') and http_method == 'POST':
             video_id = event['pathParameters']['videoId']
             return handle_refresh_url(video_id)
+        elif path.startswith('/videos/') and http_method == 'DELETE':
+            video_id = event['pathParameters']['videoId']
+            return handle_delete_video(video_id)
         elif path.startswith('/videos/') and http_method == 'GET':
             video_id = event['pathParameters']['videoId']
             return handle_get_video_status(video_id)
@@ -82,15 +93,15 @@ def handle_generate_video(event, context):
             # Parse form data (simplified - you may want to use a library)
             # For now, expecting JSON body with base64 encoded image
             data = json.loads(event['body'])
-            prompt = data.get('prompt')
+            user_prompt = data.get('prompt')
             image_data = data.get('image')  # base64 encoded image
         else:
             # JSON body
             data = json.loads(event['body'])
-            prompt = data.get('prompt')
+            user_prompt = data.get('prompt')
             image_data = data.get('image')
 
-        if not prompt:
+        if not user_prompt:
             return create_response(400, {'error': 'Prompt is required'})
 
         if not image_data:
@@ -106,15 +117,18 @@ def handle_generate_video(event, context):
         # Convert to milliseconds for JavaScript
         timestamp = int(time.time() * 1000)
 
+        # Combine system prompt with user prompt for Gemini
+        full_prompt = SYSTEM_PROMPT + user_prompt
+
         # Start Gemini job (just initiate, don't wait)
-        job_name = start_gemini_job(prompt, image_data)
+        job_name = start_gemini_job(full_prompt, image_data)
         print(f"Started Gemini job: {job_name} for video: {video_id}")
 
-        # Store initial metadata in DynamoDB with job name
+        # Store only user prompt in DynamoDB (not system prompt)
         videos_table.put_item(
             Item={
                 'id': video_id,
-                'prompt': prompt,
+                'prompt': user_prompt,
                 'status': 'processing',
                 'jobName': job_name,
                 'createdAt': timestamp,
@@ -177,6 +191,7 @@ def start_gemini_job(prompt, image_base64):
                   }]
     parameters = {
         "aspectRatio": "16:9",
+        "negativePrompt": "cartoon, drawing, low quality"
     }
 
     print(f"Calling Gemini API with prompt: {prompt}")
@@ -277,6 +292,45 @@ def handle_refresh_url(video_id):
         return create_response(500, {'error': str(e)})
 
 
+def handle_delete_video(video_id):
+    """Handle DELETE /videos/{videoId} - Delete video from S3 and DynamoDB"""
+
+    try:
+        # Get video from DynamoDB to check if it exists
+        response = videos_table.get_item(Key={'id': video_id})
+
+        if 'Item' not in response:
+            return create_response(404, {'error': 'Video not found'})
+
+        video = response['Item']
+
+        # Delete from S3 if video is completed
+        if video.get('status') == 'completed':
+            try:
+                key = f"videos/{video_id}.mp4"
+                s3_client.delete_object(
+                    Bucket=VIDEOS_BUCKET,
+                    Key=key
+                )
+                print(f"Deleted video from S3: {key}")
+            except ClientError as e:
+                print(f"Warning: Could not delete from S3: {str(e)}")
+                # Continue with DynamoDB deletion even if S3 fails
+
+        # Delete from DynamoDB
+        videos_table.delete_item(Key={'id': video_id})
+        print(f"Deleted video from DynamoDB: {video_id}")
+
+        return create_response(200, {
+            'message': 'Video deleted successfully',
+            'videoId': video_id
+        })
+
+    except Exception as e:
+        print(f"Error deleting video: {str(e)}")
+        return create_response(500, {'error': str(e)})
+
+
 def decimal_to_int(obj):
     """Convert Decimal objects to int for JSON serialization"""
     if isinstance(obj, list):
@@ -300,7 +354,7 @@ def create_response(status_code, body):
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': '*',
             'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
-            'Access-Control-Allow-Methods': 'GET,POST,OPTIONS'
+            'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS'
         },
         'body': json.dumps(body)
     }

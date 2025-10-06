@@ -73,7 +73,7 @@ def lambda_handler(event, context):
 
         while poll_count < max_polls:
             status = check_job_status(job_name)
-
+            print(f"Polled status for job {job_name}: {json.dumps(status)}")
             if status.get('done'):
                 print(f"Job completed for video: {video_id}")
 
@@ -112,7 +112,9 @@ def lambda_handler(event, context):
                 else:
                     # Job done but no video URL (error case)
                     error_msg = get_nested(
-                        status, ['error', 'message'], 'Unknown error')
+                        status, ['response', 'generateVideoResponse', 'raiMediaFilteredReasons'], 'Unknown error')
+                    if type(error_msg) == list:
+                        error_msg = ', '.join(error_msg)
                     print(f"Job failed: {error_msg}")
 
                     timestamp = int(time.time() * 1000)
@@ -181,10 +183,7 @@ def check_job_status(job_name):
         'x-goog-api-key': GEMINI_API_KEY
     }
     url = STATUS_ENDPOINT + job_name
-    print(f"Checking job status at: {url}")
     response = requests.get(url, headers=headers)
-    print(f"Status response code: {response.status_code}")
-    print(f"Status response body: {response.text}")
     return json.loads(response.content)
 
 

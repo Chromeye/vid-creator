@@ -73,3 +73,17 @@ export const refreshVideoUrl = async (videoId) => {
 
   return response.json();
 };
+
+export const deleteVideo = async (videoId) => {
+  const response = await fetch(`${API_URL}/videos/${videoId}`, {
+    method: 'DELETE',
+    headers: getHeaders(),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(error.error || 'Failed to delete video');
+  }
+
+  return response.json();
+};

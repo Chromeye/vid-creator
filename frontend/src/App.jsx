@@ -2,6 +2,7 @@ import { useState } from 'react';
 import VideoUploadForm from './components/VideoUploadForm';
 import VideoList from './components/VideoList';
 import { generateVideo } from './services/api';
+import { MainContextProvider } from './context/context-provider';
 import './App.css';
 
 function App() {
@@ -14,11 +15,11 @@ function App() {
 
       setNotification({
         type: 'success',
-        message: 'Video generation started! Check the list below for updates.'
+        message: 'Video generation started! Refresh the list below for updates.',
       });
 
       // Refresh the video list
-      setRefreshTrigger(prev => prev + 1);
+      setRefreshTrigger((prev) => prev + 1);
 
       // Clear notification after 5 seconds
       setTimeout(() => setNotification(null), 5000);
@@ -27,7 +28,7 @@ function App() {
     } catch (error) {
       setNotification({
         type: 'error',
-        message: error.message || 'Failed to start video generation'
+        message: error.message || 'Failed to start video generation',
       });
 
       // Clear notification after 5 seconds
@@ -38,27 +39,25 @@ function App() {
   };
 
   return (
-    <div className="app">
-      <header className="app-header">
-        <h1>Streameye PoC Video Generator</h1>
-        <p>Generate videos from images and prompts using Google's Veo 3 video creator</p>
-      </header>
+    <MainContextProvider initialValues={{}}>
+      <div className='app'>
+        <header className='app-header'>
+          <h1>Streameye PoC Video Generator</h1>
+          <p>Generate videos from images and prompts using Google's Veo 3 video creator</p>
+        </header>
 
-      {notification && (
-        <div className={`notification ${notification.type}`}>
-          {notification.message}
-        </div>
-      )}
+        {notification && <div className={`notification ${notification.type}`}>{notification.message}</div>}
 
-      <main className="app-main">
-        <VideoUploadForm onSubmit={handleVideoSubmit} />
-        <VideoList refreshTrigger={refreshTrigger} />
-      </main>
+        <main className='app-main'>
+          <VideoUploadForm onSubmit={handleVideoSubmit} />
+          <VideoList refreshTrigger={refreshTrigger} />
+        </main>
 
-      <footer className="app-footer">
-        <p>AWS Lambda + Google Veo 3</p>
-      </footer>
-    </div>
+        <footer className='app-footer'>
+          <p>AWS Lambda + Google Veo 3</p>
+        </footer>
+      </div>
+    </MainContextProvider>
   );
 }
 

@@ -127,8 +127,15 @@ export default function VideoList({ refreshTrigger }) {
                 <h3>{video.prompt}</h3>
                 <p className='video-date'>{new Date(video.createdAt).toLocaleString()}</p>
                 <div className='video-status'>
-                  <span className='status-indicator' style={{ backgroundColor: getStatusColor(video.status) }} />
-                  <span>{video.status}</span>
+                  <span>
+                    <span className='status-indicator' style={{ backgroundColor: getStatusColor(video.status) }} />
+                    <span>{video.status}</span>
+                  </span>
+                  {video.model && (
+                    <div>
+                      Model: <span className={`video-model ${video.model === 'gemini-veo-3' && 'pro'}`}>{video.model === 'gemini-veo-3-fast' ? 'Veo 3 Fast' : 'Veo 3'}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 

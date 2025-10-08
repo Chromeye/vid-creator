@@ -19,7 +19,7 @@ Parameters:
 Globals:
   Function:
     Timeout: 300
-    MemorySize: 1024
+    MemorySize: 256
     Runtime: python3.12
     Environment:
       Variables:

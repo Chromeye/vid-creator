@@ -28,7 +28,6 @@ export const VideoViewer = ({ id, onClose }) => {
     setVideoDetails(null);
     onClose();
   });
-  console.log('Video details:', videoDetails);
   return (
     <div className='video-viewer-overlay'>
       <div className='video-viewer-content' ref={contentBoxRef}>
@@ -44,6 +43,14 @@ export const VideoViewer = ({ id, onClose }) => {
               <span>
                 Status: <strong style={{ color: getStatusColor(videoDetails.status) }}>{videoDetails.status}</strong>
               </span>
+              {videoDetails.model && (
+                <span>
+                  Model:{' '}
+                  <span className={`video-model ${videoDetails.model === 'gemini-veo-3' && 'pro'}`}>
+                    <strong className={videoDetails.model === 'gemini-veo-3' ? 'pro' : ''}>{videoDetails.model === 'gemini-veo-3-fast' ? 'Veo 3 Fast' : 'Veo 3'}</strong>
+                  </span>
+                </span>
+              )}
               <span>
                 Created At: <strong>{new Date(videoDetails.createdAt).toLocaleString()}</strong>
               </span>

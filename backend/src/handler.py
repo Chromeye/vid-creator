@@ -22,14 +22,22 @@ GEMINI_API_KEY = os.environ['GEMINI_API_KEY']
 # DynamoDB table
 videos_table = dynamodb.Table(VIDEOS_TABLE)
 
-MODEL_ID = "veo-3.0-fast-generate-001"
-API_ENDPOINT = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_ID}:predictLongRunning"
+MODEL_MAP = {"gemini-veo-3-fast": "veo-3.0-fast-generate-001",
+             "gemini-veo-3": "veo-3.0-generate-001"}
+
+# API_ENDPOINT = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_ID}:predictLongRunning"
 STATUS_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/"
 SYSTEM_PROMPT = """Generate a short video based on the user's prompt and image. 
 The video should be photorealistic, live action and should not carry any appeal to minors. 
 The image provided is AI generated and is fictional. The video should be consistent with the image provided.
 The video will be used to create marketing materials for PaddyPower, following their brand guidelines and
 humouristic style: \n\n"""
+
+
+def get_api_endpoint(model):
+    """Get API endpoint based on model"""
+    model_id = MODEL_MAP.get(model, MODEL_MAP["gemini-veo-3-fast"])
+    return f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:predictLongRunning"
 
 
 def get_nested(data, keys, default=None):
@@ -80,26 +88,17 @@ def handle_generate_video(event, context):
     """Handle POST /generate - Start video generation"""
 
     try:
-        # Parse multipart form data
-        content_type = event['headers'].get('content-type', '')
+        # Handle base64 encoded body (API Gateway may encode the entire request body)
+        body = event['body']
+        if event.get('isBase64Encoded', False):
+            body = base64.b64decode(body).decode('utf-8')
 
-        if 'multipart/form-data' in content_type:
-            body = event['body']
-            is_base64 = event.get('isBase64Encoded', False)
-
-            if is_base64:
-                body = base64.b64decode(body)
-
-            # Parse form data (simplified - you may want to use a library)
-            # For now, expecting JSON body with base64 encoded image
-            data = json.loads(event['body'])
-            user_prompt = data.get('prompt')
-            image_data = data.get('image')  # base64 encoded image
-        else:
-            # JSON body
-            data = json.loads(event['body'])
-            user_prompt = data.get('prompt')
-            image_data = data.get('image')
+        # Parse JSON body
+        data = json.loads(body)
+        print(f"Request data: {json.dumps(data)}")
+        user_prompt = data.get('prompt')
+        image_data = data.get('image')  # base64 encoded image
+        model = data.get('model', 'gemini-veo-3-fast')  # default model
 
         if not user_prompt:
             return create_response(400, {'error': 'Prompt is required'})
@@ -121,7 +120,7 @@ def handle_generate_video(event, context):
         full_prompt = SYSTEM_PROMPT + user_prompt
 
         # Start Gemini job (just initiate, don't wait)
-        job_name = start_gemini_job(full_prompt, image_data)
+        job_name = start_gemini_job(full_prompt, model, image_data)
         print(f"Started Gemini job: {job_name} for video: {video_id}")
 
         # Store only user prompt in DynamoDB (not system prompt)
@@ -129,6 +128,7 @@ def handle_generate_video(event, context):
             Item={
                 'id': video_id,
                 'prompt': user_prompt,
+                'model': model,
                 'status': 'processing',
                 'jobName': job_name,
                 'createdAt': timestamp,
@@ -166,7 +166,7 @@ def handle_generate_video(event, context):
         return create_response(500, {'error': str(e)})
 
 
-def start_gemini_job(prompt, image_base64):
+def start_gemini_job(prompt, model, image_base64):
     """Start Gemini video generation job and return job name"""
 
     # Mock mode for testing
@@ -195,14 +195,11 @@ def start_gemini_job(prompt, image_base64):
     }
 
     print(f"Calling Gemini API with prompt: {prompt}")
-    # Truncate for logging
-    response = requests.post(API_ENDPOINT,
+    response = requests.post(get_api_endpoint(model),
                              headers=headers,
                              json={"instances": instances,
                                    "parameters": parameters})
 
-    print(f"Gemini response status: {response.status_code}")
-    print(f"Gemini response body: {response.text}")
     response.raise_for_status()
     job_name = json.loads(response.content)["name"]
     print(f"Job name: {job_name}")

@@ -9,9 +9,9 @@ function App() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [notification, setNotification] = useState(null);
 
-  const handleVideoSubmit = async ({ prompt, image }) => {
+  const handleVideoSubmit = async ({ prompt, image, model }) => {
     try {
-      const result = await generateVideo({ prompt, image });
+      const result = await generateVideo({ prompt, image, model });
 
       setNotification({
         type: 'success',
@@ -39,7 +39,7 @@ function App() {
   };
 
   return (
-    <MainContextProvider initialValues={{}}>
+    <MainContextProvider initialValues={{ model: 'gemini-veo-3-fast' }}>
       <div className='app'>
         <header className='app-header'>
           <h1>Streameye PoC Video Generator</h1>

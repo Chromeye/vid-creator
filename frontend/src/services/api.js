@@ -8,7 +8,7 @@ const getHeaders = () => {
   return headers;
 };
 
-export const generateVideo = async ({ prompt, image }) => {
+export const generateVideo = async ({ prompt, image, model }) => {
   // Convert image file to base64
   const imageBase64 = await new Promise((resolve) => {
     const reader = new FileReader();
@@ -25,6 +25,7 @@ export const generateVideo = async ({ prompt, image }) => {
     body: JSON.stringify({
       prompt,
       image: imageBase64,
+      model,
     }),
   });
 

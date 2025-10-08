@@ -48,7 +48,7 @@ export default function VideoUploadForm({ onSubmit }) {
     setError('');
 
     try {
-      await onSubmit({ prompt: context.data.prompt, image });
+      await onSubmit({ prompt: context.data.prompt, image, model: context.data.model });
       // Reset form after successful submission
       context.updateValue('prompt', '');
       setImage(null);
@@ -68,6 +68,19 @@ export default function VideoUploadForm({ onSubmit }) {
       <h2>Generate Video with Gemini Veo 3</h2>
 
       <form onSubmit={handleSubmit} ref={formRef}>
+        <div className='form-group'>
+          <label htmlFor='model'>Model:</label>
+          <select
+            id='model'
+            value={context.data.model || 'gemini-veo-3-fast'}
+            className='model-options'
+            onChange={(e) => context.updateValue('model', e.target.value)}
+            disabled={isSubmitting}
+          >
+            <option value='gemini-veo-3-fast'>Gemini Veo 3 Fast</option>
+            <option value='gemini-veo-3'>Gemini Veo 3</option>
+          </select>
+        </div>
         <div className='form-group'>
           <label htmlFor='prompt'>Prompt:</label>
           <textarea

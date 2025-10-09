@@ -22,19 +22,21 @@ body {
   color: var(--text-primary);
   margin: 0;
   padding: 0;
+  height: 100vh;
 }
 
 .app {
-  min-height: 100vh;
+  height: 100vh;
   width: 100vw;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .app-header {
   background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
   color: white;
-  padding: 2rem;
+  padding: 1rem;
   text-align: center;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
@@ -55,6 +57,7 @@ body {
   display: grid;
   grid-template-columns: 1fr;
   gap: 2rem;
+  overflow: hidden;
 }
 
 @media (min-width: 1024px) {
@@ -66,7 +69,7 @@ body {
 .app-footer {
   background-color: var(--surface);
   border-top: 1px solid var(--border-color);
-  padding: 1rem;
+  padding: 0.5rem;
   text-align: center;
   color: var(--text-secondary);
 }
@@ -108,7 +111,7 @@ body {
 .upload-form {
   background-color: var(--surface);
   border-radius: 12px;
-  padding: 2rem;
+  padding: 1rem;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
@@ -210,8 +213,12 @@ button:disabled {
 .video-list {
   background-color: var(--surface);
   border-radius: 12px;
-  padding: 2rem;
+  padding: 1rem;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  height: 100%;
+  overflow-y: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .list-header {
@@ -247,7 +254,9 @@ button:disabled {
 
 .videos-grid {
   display: grid;
-  gap: 1.5rem;
+  gap: 1rem;
+  overflow-y: auto;
+  flex: 1;
 }
 
 .video-card {

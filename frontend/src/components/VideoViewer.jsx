@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { getVideoStatus } from '../services/api';
 import { useOnClickOutside } from '../utils/useOnClickOutside';
-import { getStatusColor } from '../utils/utils';
+import { getModelLabel, getStatusColor } from '../utils/utils';
 
 export const VideoViewer = ({ id, onClose }) => {
   const [videoDetails, setVideoDetails] = useState(null);
@@ -46,8 +46,8 @@ export const VideoViewer = ({ id, onClose }) => {
               {videoDetails.model && (
                 <span>
                   Model:{' '}
-                  <span className={`video-model ${videoDetails.model === 'gemini-veo-31' && 'pro'}`}>
-                    <strong className={videoDetails.model === 'gemini-veo-31' ? 'pro' : ''}>{videoDetails.model === 'gemini-veo-31-fast' ? 'Veo 3.1 Fast' : 'Veo 3.1'}</strong>
+                  <span className={`video-model ${getModelLabel(videoDetails.model).className}`}>
+                    <strong className={getModelLabel(videoDetails.model).className}>{getModelLabel(videoDetails.model).name}</strong>
                   </span>
                 </span>
               )}

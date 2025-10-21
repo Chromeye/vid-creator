@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getVideos, refreshVideoUrl, deleteVideo } from '../services/api';
-import { getStatusColor } from '../utils/utils';
+import { getModelLabel, getStatusColor } from '../utils/utils';
 import { VideoViewer } from './VideoViewer';
 import { useMyContext } from '../context/context-provider';
 
@@ -133,7 +133,7 @@ export default function VideoList({ refreshTrigger }) {
                   </span>
                   {video.model && (
                     <div>
-                      Model: <span className={`video-model ${video.model === 'gemini-veo-31' && 'pro'}`}>{video.model === 'gemini-veo-31-fast' ? 'Veo 3.1 Fast' : 'Veo 3.1'}</span>
+                      Model: <span className={`video-model ${getModelLabel(video.model).className}`}>{getModelLabel(video.model).name}</span>
                     </div>
                   )}
                 </div>

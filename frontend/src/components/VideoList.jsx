@@ -133,7 +133,7 @@ export default function VideoList({ refreshTrigger }) {
                   </span>
                   {video.model && (
                     <div>
-                      Model: <span className={`video-model ${video.model === 'gemini-veo-3' && 'pro'}`}>{video.model === 'gemini-veo-3-fast' ? 'Veo 3 Fast' : 'Veo 3'}</span>
+                      Model: <span className={`video-model ${video.model === 'gemini-veo-31' && 'pro'}`}>{video.model === 'gemini-veo-31-fast' ? 'Veo 3.1 Fast' : 'Veo 3.1'}</span>
                     </div>
                   )}
                 </div>

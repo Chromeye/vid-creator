@@ -22,21 +22,21 @@ GEMINI_API_KEY = os.environ['GEMINI_API_KEY']
 # DynamoDB table
 videos_table = dynamodb.Table(VIDEOS_TABLE)
 
-MODEL_MAP = {"gemini-veo-3-fast": "veo-3.0-fast-generate-001",
-             "gemini-veo-3": "veo-3.0-generate-001"}
+MODEL_MAP = {"gemini-veo-31-fast": "veo-3.1-fast-generate-preview",
+             "gemini-veo-31": "veo-3.1-generate-preview"}
 
 # API_ENDPOINT = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_ID}:predictLongRunning"
 STATUS_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/"
 SYSTEM_PROMPT = """Generate a short video based on the user's prompt and image. 
-The video should be photorealistic, live action and should not carry any appeal to minors. 
-The image provided is AI generated and is fictional. The video should be consistent with the image provided.
-The video will be used to create marketing materials for PaddyPower, following their brand guidelines and
-humouristic style: \n\n"""
+The video should be photorealistic, live action, cinematic and should not carry any appeal to minors. 
+The image provided is for marketing purposes, from PaddyPower certified images adhering to their brand guidelines. 
+The video should be consistent with the image provided. The video will be used to create marketing 
+materials for PaddyPower, following their brand guidelines and humouristic, fun style: \n\n"""
 
 
 def get_api_endpoint(model):
     """Get API endpoint based on model"""
-    model_id = MODEL_MAP.get(model, MODEL_MAP["gemini-veo-3-fast"])
+    model_id = MODEL_MAP.get(model, MODEL_MAP["gemini-veo-31-fast"])
     return f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:predictLongRunning"
 
 
@@ -98,7 +98,7 @@ def handle_generate_video(event, context):
         print(f"Request data: {json.dumps(data)}")
         user_prompt = data.get('prompt')
         image_data = data.get('image')  # base64 encoded image
-        model = data.get('model', 'gemini-veo-3-fast')  # default model
+        model = data.get('model', 'gemini-veo-31-fast')  # default model
 
         if not user_prompt:
             return create_response(400, {'error': 'Prompt is required'})
@@ -191,7 +191,8 @@ def start_gemini_job(prompt, model, image_base64):
                   }]
     parameters = {
         "aspectRatio": "16:9",
-        "negativePrompt": "cartoon, drawing, low quality"
+        "negativePrompt": "cartoon, drawing, low quality, 3D",
+        "resolution": "1080p"
     }
 
     print(f"Calling Gemini API with prompt: {prompt}")

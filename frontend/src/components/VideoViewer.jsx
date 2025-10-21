@@ -46,8 +46,8 @@ export const VideoViewer = ({ id, onClose }) => {
               {videoDetails.model && (
                 <span>
                   Model:{' '}
-                  <span className={`video-model ${videoDetails.model === 'gemini-veo-3' && 'pro'}`}>
-                    <strong className={videoDetails.model === 'gemini-veo-3' ? 'pro' : ''}>{videoDetails.model === 'gemini-veo-3-fast' ? 'Veo 3 Fast' : 'Veo 3'}</strong>
+                  <span className={`video-model ${videoDetails.model === 'gemini-veo-31' && 'pro'}`}>
+                    <strong className={videoDetails.model === 'gemini-veo-31' ? 'pro' : ''}>{videoDetails.model === 'gemini-veo-31-fast' ? 'Veo 3.1 Fast' : 'Veo 3.1'}</strong>
                   </span>
                 </span>
               )}

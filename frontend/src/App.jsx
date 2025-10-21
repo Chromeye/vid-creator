@@ -39,7 +39,7 @@ function App() {
   };
 
   return (
-    <MainContextProvider initialValues={{ model: 'gemini-veo-3-fast' }}>
+    <MainContextProvider initialValues={{ model: 'gemini-veo-31-fast' }}>
       <div className='app'>
         <header className='app-header'>
           <h1>Streameye PoC Video Generator</h1>

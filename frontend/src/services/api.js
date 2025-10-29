@@ -9,12 +9,27 @@ const getHeaders = () => {
 };
 
 export const generateVideo = async ({ prompt, image, model }) => {
-  // Convert image file to base64
-  const imageBase64 = await new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result);
-    reader.readAsDataURL(image);
-  });
+  // Convert image files to base64
+  const convertToBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const imageData = {};
+
+  // Convert start image (required)
+  if (image.start) {
+    imageData.start = await convertToBase64(image.start);
+  }
+
+  // Convert end image (optional)
+  if (image.end) {
+    imageData.end = await convertToBase64(image.end);
+  }
 
   const response = await fetch(`${API_URL}/generate`, {
     method: 'POST',
@@ -24,7 +39,7 @@ export const generateVideo = async ({ prompt, image, model }) => {
     },
     body: JSON.stringify({
       prompt,
-      image: imageBase64,
+      image: imageData,
       model,
     }),
   });

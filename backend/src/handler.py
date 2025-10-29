@@ -97,19 +97,26 @@ def handle_generate_video(event, context):
         data = json.loads(body)
         print(f"Request data: {json.dumps(data)}")
         user_prompt = data.get('prompt')
-        image_data = data.get('image')  # base64 encoded image
+        image_dict = data.get('image')  # object with 'start' and optional 'end'
         model = data.get('model', 'gemini-veo-31-fast')  # default model
 
         if not user_prompt:
             return create_response(400, {'error': 'Prompt is required'})
 
-        if not image_data:
-            return create_response(400, {'error': 'Image is required'})
+        if not image_dict or not image_dict.get('start'):
+            return create_response(400, {'error': 'Start image is required'})
 
-        # Decode base64 image (remove data URL prefix if present)
-        if image_data.startswith('data:'):
+        # Decode base64 images (remove data URL prefix if present)
+        start_image_base64 = image_dict.get('start')
+        end_image_base64 = image_dict.get('end')  # optional
+
+        if start_image_base64.startswith('data:'):
             # Remove "data:image/jpeg;base64," prefix
-            image_data = image_data.split(',', 1)[1]
+            start_image_base64 = start_image_base64.split(',', 1)[1]
+
+        if end_image_base64 and end_image_base64.startswith('data:'):
+            # Remove "data:image/jpeg;base64," prefix
+            end_image_base64 = end_image_base64.split(',', 1)[1]
 
         # Generate unique video ID
         video_id = str(uuid.uuid4())
@@ -120,21 +127,25 @@ def handle_generate_video(event, context):
         full_prompt = SYSTEM_PROMPT + user_prompt
 
         # Start Gemini job (just initiate, don't wait)
-        job_name = start_gemini_job(full_prompt, model, image_data)
+        job_name = start_gemini_job(full_prompt, model, start_image_base64, end_image_base64)
         print(f"Started Gemini job: {job_name} for video: {video_id}")
 
         # Store only user prompt in DynamoDB (not system prompt)
-        videos_table.put_item(
-            Item={
-                'id': video_id,
-                'prompt': user_prompt,
-                'model': model,
-                'status': 'processing',
-                'jobName': job_name,
-                'createdAt': timestamp,
-                'updatedAt': timestamp
-            }
-        )
+        item = {
+            'id': video_id,
+            'prompt': user_prompt,
+            'model': model,
+            'status': 'processing',
+            'jobName': job_name,
+            'createdAt': timestamp,
+            'updatedAt': timestamp
+        }
+
+        # Store whether end image was provided
+        if end_image_base64:
+            item['hasEndImage'] = True
+
+        videos_table.put_item(Item=item)
 
         # Get poller Lambda function name from environment
         poller_function = os.environ.get('POLLER_FUNCTION_NAME')
@@ -166,7 +177,7 @@ def handle_generate_video(event, context):
         return create_response(500, {'error': str(e)})
 
 
-def start_gemini_job(prompt, model, image_base64):
+def start_gemini_job(prompt, model, start_image_base64, end_image_base64=None):
     """Start Gemini video generation job and return job name"""
 
     # Mock mode for testing
@@ -183,19 +194,31 @@ def start_gemini_job(prompt, model, image_base64):
         'Content-Type': 'application/json',
         'x-goog-api-key': GEMINI_API_KEY
     }
-    instances = [{"prompt": prompt,
-                  "image": {
-                      "bytesBase64Encoded": image_base64,
-                      "mimeType": "image/png"
-                  }
-                  }]
+
+    # Build instance with required start image
+    instance = {
+        "prompt": prompt,
+        "image": {
+            "bytesBase64Encoded": start_image_base64,
+            "mimeType": "image/png"
+        }
+    }
+
+    # Add optional end image (lastFrame)
+    if end_image_base64:
+        instance["lastFrame"] = {
+            "bytesBase64Encoded": end_image_base64,
+            "mimeType": "image/png"
+        }
+
+    instances = [instance]
     parameters = {
         "aspectRatio": "16:9",
         "negativePrompt": "cartoon, drawing, low quality, 3D",
         "resolution": "1080p"
     }
 
-    print(f"Calling Gemini API with prompt: {prompt}")
+    print(f"Calling Gemini API with prompt: {prompt}, has_end_image: {bool(end_image_base64)}")
     response = requests.post(get_api_endpoint(model),
                              headers=headers,
                              json={"instances": instances,

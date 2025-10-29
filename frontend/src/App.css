@@ -117,12 +117,18 @@ body {
   padding: 1rem;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .upload-form h2 {
   margin-bottom: 1.5rem;
   color: var(--text-primary);
   font-size: 1.5rem;
+}
+.form-body {
+  display: flex;
+  flex-direction: column;
 }
 
 .form-group {
@@ -150,7 +156,14 @@ body {
   font-size: 1rem;
   transition: border-color 0.2s;
 }
-
+.final-frame-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.final-frame-option label {
+  margin: 0;
+}
 .form-group textarea {
   resize: vertical;
   min-height: 100px;
@@ -162,18 +175,21 @@ body {
   border-color: var(--primary-color);
 }
 
-.image-preview {
+.image-previews {
   margin: 1rem 0;
   padding: 1rem;
   background-color: var(--background);
-  border-radius: 8px;
+  display: flex;
+  flex: 1;
+  gap: 0.5rem;
 }
 
-.image-preview img {
+.image-previews img {
+  flex: 1;
   max-width: 100%;
   height: auto;
+  min-width: 0;
   border-radius: 4px;
-  display: block;
   margin-bottom: 0.5rem;
 }
 

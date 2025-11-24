@@ -16,8 +16,8 @@ export default function VideoUploadForm({ onSubmit }) {
     if (!file) return;
 
     // Validate file type
-    if (!['image/jpeg', 'image/png'].includes(file.type)) {
-      setError((current) => ({ ...current, [position || 'start']: 'Please upload a JPG or PNG file' }));
+    if (!['image/jpeg'].includes(file.type)) {
+      setError((current) => ({ ...current, [position || 'start']: 'Please upload a JPG file' }));
       return;
     }
 
@@ -98,8 +98,8 @@ export default function VideoUploadForm({ onSubmit }) {
         </div>
 
         <div className='form-group'>
-          <label htmlFor='image'>Start frame referenence (1280x720, JPG/PNG):</label>
-          <input id='image' type='file' accept='image/jpeg,image/png' onChange={handleImageChange} disabled={isSubmitting} required />
+          <label htmlFor='image'>Start frame referenence (1280x720, JPG):</label>
+          <input id='image' type='file' accept='image/jpeg' onChange={handleImageChange} disabled={isSubmitting} required />
           {error.start && <p className='error-message'>{error.start}</p>}
         </div>
         <div className='form-group final-frame-option'>
@@ -120,8 +120,8 @@ export default function VideoUploadForm({ onSubmit }) {
         </div>
         {showFinalFrame && (
           <div className='form-group'>
-            <label htmlFor='finalFrame'>Final frame reference (1280x720, JPG/PNG):</label>
-            <input id='image' type='file' accept='image/jpeg,image/png' onChange={(e) => handleImageChange(e, 'end')} disabled={isSubmitting} required />
+            <label htmlFor='finalFrame'>Final frame reference (1280x720, JPG):</label>
+            <input id='image' type='file' accept='image/jpeg' onChange={(e) => handleImageChange(e, 'end')} disabled={isSubmitting} required />
             {error.end && <p className='error-message'>{error.end}</p>}
           </div>
         )}

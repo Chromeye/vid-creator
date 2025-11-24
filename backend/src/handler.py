@@ -1,13 +1,13 @@
-import json
-import os
-import uuid
 import base64
-import time
+from botocore.exceptions import ClientError
+import boto3
 from datetime import datetime
 from decimal import Decimal
-import boto3
-from botocore.exceptions import ClientError
+import json
+import os
 import requests
+import time
+import uuid
 
 # Initialize AWS clients
 s3_client = boto3.client('s3')
@@ -97,7 +97,8 @@ def handle_generate_video(event, context):
         data = json.loads(body)
         print(f"Request data: {json.dumps(data)}")
         user_prompt = data.get('prompt')
-        image_dict = data.get('image')  # object with 'start' and optional 'end'
+        # object with 'start' and optional 'end'
+        image_dict = data.get('image')
         model = data.get('model', 'gemini-veo-31-fast')  # default model
 
         if not user_prompt:
@@ -127,7 +128,8 @@ def handle_generate_video(event, context):
         full_prompt = SYSTEM_PROMPT + user_prompt
 
         # Start Gemini job (just initiate, don't wait)
-        job_name = start_gemini_job(full_prompt, model, start_image_base64, end_image_base64)
+        job_name = start_gemini_job(
+            full_prompt, model, start_image_base64, end_image_base64)
         print(f"Started Gemini job: {job_name} for video: {video_id}")
 
         # Store only user prompt in DynamoDB (not system prompt)
@@ -218,7 +220,8 @@ def start_gemini_job(prompt, model, start_image_base64, end_image_base64=None):
         "resolution": "1080p"
     }
 
-    print(f"Calling Gemini API with prompt: {prompt}, has_end_image: {bool(end_image_base64)}")
+    print(
+        f"Calling Gemini API with prompt: {prompt}, has_end_image: {bool(end_image_base64)}")
     response = requests.post(get_api_endpoint(model),
                              headers=headers,
                              json={"instances": instances,

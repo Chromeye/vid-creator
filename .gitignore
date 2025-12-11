@@ -50,3 +50,12 @@ ENV/
 # AWS
 .aws-sam/
 samconfig.toml
+
+# Lambda Layers (build artifacts)
+opencv-layer/
+ffmpeg-layer/
+combined-layer/
+*-layer/
+
+# Shell scripts
+shellscripts/

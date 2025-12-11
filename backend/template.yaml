@@ -20,7 +20,7 @@ Globals:
   Function:
     Timeout: 300
     MemorySize: 256
-    Runtime: python3.12
+    Runtime: python3.11
     Environment:
       Variables:
         ENVIRONMENT: !Ref Environment
@@ -82,6 +82,7 @@ Resources:
         Variables:
           VIDEOS_TABLE: !Ref VideosTable
           POLLER_FUNCTION_NAME: !Ref VideoPollerFunction
+          BACKGROUND_PROCESSOR_FUNCTION_NAME: !Ref BackgroundProcessorFunction
           USE_MOCK_GEMINI: 'false'
       Policies:
         - S3CrudPolicy:
@@ -90,6 +91,8 @@ Resources:
             TableName: !Ref VideosTable
         - LambdaInvokePolicy:
             FunctionName: !Ref VideoPollerFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref BackgroundProcessorFunction
       Events:
         GenerateVideo:
           Type: Api
@@ -123,6 +126,14 @@ Resources:
             Method: POST
             Auth:
               ApiKeyRequired: true
+        ReplaceBackground:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /videos/{videoId}/replace-background
+            Method: POST
+            Auth:
+              ApiKeyRequired: true
         DeleteVideo:
           Type: Api
           Properties:
@@ -131,6 +142,29 @@ Resources:
             Method: DELETE
             Auth:
               ApiKeyRequired: true
+
+  # Lambda Function for background replacement processing
+  BackgroundProcessorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-background-processor-${Environment}'
+      CodeUri: ./src
+      Handler: background_processor_lambda.lambda_handler
+      Timeout: 900 # 15 minutes
+      MemorySize: 3008 # 3 GB for video processing
+      EphemeralStorage:
+        Size: 2048 # 2 GB for temporary files
+      Environment:
+        Variables:
+          VIDEOS_TABLE: !Ref VideosTable
+          LD_LIBRARY_PATH: /opt/lib:${LD_LIBRARY_PATH}
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref VideosBucket
+        - DynamoDBCrudPolicy:
+            TableName: !Ref VideosTable
+      Layers:
+        - arn:aws:lambda:us-east-1:780954185713:layer:opencv-h264-working:13
 
   # Lambda Function for polling Gemini job status
   VideoPollerFunction:

@@ -15,8 +15,8 @@ export AWS_DEFAULT_REGION=${AWS_REGION:-us-east-1}
 echo "AWS Region: $AWS_DEFAULT_REGION"
 echo "Building SAM application..."
 
-# Build the SAM application
-sam build
+# Build the SAM application using container (required when local Python version differs)
+sam build --use-container
 
 if [ $? -ne 0 ]; then
     echo "Error: SAM build failed!"

@@ -103,3 +103,52 @@ export const deleteVideo = async (videoId) => {
 
   return response.json();
 };
+
+// Chroma key RGB for green screen
+// null = use backend default (0, 171, 69)
+// To test different values, set to [R, G, B] array, e.g., [0, 255, 0]
+export const CHROMA_KEY_RGB = null;
+
+export const replaceVideoBackground = async (videoId, { bgColor, bgImage }) => {
+  // Convert image file to base64 if provided
+  let bgImageBase64 = null;
+  if (bgImage) {
+    bgImageBase64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(bgImage);
+    });
+  }
+
+  // Convert hex color to RGB array if provided
+  let bgColorRgb = null;
+  if (bgColor) {
+    const hex = bgColor.replace('#', '');
+    bgColorRgb = [
+      parseInt(hex.substring(0, 2), 16),
+      parseInt(hex.substring(2, 4), 16),
+      parseInt(hex.substring(4, 6), 16)
+    ];
+  }
+
+  const response = await fetch(`${API_URL}/videos/${videoId}/replace-background`, {
+    method: 'POST',
+    headers: {
+      ...getHeaders(),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      bgColor: bgColorRgb,
+      bgImage: bgImageBase64,
+      chromaKey: CHROMA_KEY_RGB
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(error.error || 'Failed to replace background');
+  }
+
+  return response.json();
+};

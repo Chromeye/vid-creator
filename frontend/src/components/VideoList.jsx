@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { getVideos, refreshVideoUrl, deleteVideo } from '../services/api';
 import { getModelLabel, getStatusColor } from '../utils/utils';
 import { VideoViewer } from './VideoViewer';
+import { VideoReplaceBackground } from './VideoReplaceBackground';
 import { useMyContext } from '../context/context-provider';
 
 export default function VideoList({ refreshTrigger }) {
@@ -9,6 +10,7 @@ export default function VideoList({ refreshTrigger }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showVideoId, setShowVideoId] = useState(null);
+  const [replaceBackgroundVideoId, setReplaceBackgroundVideoId] = useState(null);
   const [refreshingUrls, setRefreshingUrls] = useState(new Set());
   const [deletingVideos, setDeletingVideos] = useState(new Set());
 
@@ -155,6 +157,9 @@ export default function VideoList({ refreshTrigger }) {
                       <button onClick={() => context.updateValue('prompt', video.prompt)} className='edit-prompt-btn'>
                         Reuse Prompt
                       </button>
+                      <button onClick={() => setReplaceBackgroundVideoId(video.id)} className='edit-prompt-btn'>
+                        *Replace Background
+                      </button>
                       <button onClick={() => handleDelete(video.id)} disabled={deletingVideos.has(video.id)} className='delete-btn'>
                         {deletingVideos.has(video.id) ? 'Deleting...' : 'Delete'}
                       </button>
@@ -186,6 +191,17 @@ export default function VideoList({ refreshTrigger }) {
           <VideoViewer id={showVideoId} onClose={() => setShowVideoId(null)} />
         </div>
       )}
+      {replaceBackgroundVideoId && (
+        <div className='video-modal'>
+          <VideoReplaceBackground
+            id={replaceBackgroundVideoId}
+            onClose={() => setReplaceBackgroundVideoId(null)}
+          />
+        </div>
+      )}
+      <div className='footnote'>* Replace Background feature only works if the video is generated with green screen!
+        <br />
+        Colour code for green screen is: <span className='footnote-colour'>RGB (0, 171, 69) or HEX: #00AA45</span></div>
     </div>
   );
 }

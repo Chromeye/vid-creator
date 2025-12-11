@@ -1,8 +1,11 @@
 import { useState } from 'react';
-import VideoUploadForm from './components/VideoUploadForm';
-import VideoList from './components/VideoList';
-import { generateVideo } from './services/api';
+
 import { MainContextProvider } from './context/context-provider';
+import { generateVideo } from './services/api';
+
+import VideoList from './components/VideoList';
+import VideoUploadForm from './components/VideoUploadForm';
+
 import './App.css';
 
 function App() {

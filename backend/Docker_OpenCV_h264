@@ -1,0 +1,138 @@
+# Simple working OpenCV H.264 Lambda Layer
+# Force AMD64/x86_64 architecture for Lambda compatibility
+FROM --platform=linux/amd64 public.ecr.aws/lambda/python:3.11 AS builder
+
+# Install dependencies
+RUN yum update -y && yum install -y \
+    gcc gcc-c++ make cmake3 \
+    wget tar bzip2 unzip git xz \
+    yasm nasm \
+    zlib-devel libpng-devel libjpeg-turbo-devel \
+    pkgconfig autoconf automake libtool \
+    && yum clean all
+
+RUN ln -sf /usr/bin/cmake3 /usr/bin/cmake
+WORKDIR /build
+
+# Build x264
+RUN git clone --depth 1 --branch stable https://code.videolan.org/videolan/x264.git && \
+    cd x264 && \
+    ./configure --prefix=/usr/local --enable-shared --enable-pic --disable-cli --disable-asm && \
+    make -j2 && make install && \
+    cd .. && rm -rf x264
+
+# -------------------------------------------------------------------------
+# BUILDER STAGE: CRITICAL FIX 1 - Downgrade FFmpeg to 5.1.4 for LIBAVCODEC_59 compatibility
+# -------------------------------------------------------------------------
+# Build FFmpeg
+RUN export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH && \
+    wget "https://ffmpeg.org/releases/ffmpeg-5.1.4.tar.xz" && \
+    tar xf ffmpeg-5.1.4.tar.xz && \
+    cd ffmpeg-5.1.4 && \
+    ./configure \
+    --prefix=/usr/local \
+    --enable-gpl \
+    --enable-libx264 \
+    --enable-shared \
+    --disable-static \
+    --disable-programs \
+    --disable-doc && \
+    make -j2 && make install && \
+    cd .. && rm -rf ffmpeg-*
+
+# Install Python packages in target directory
+RUN pip3 install --target /opt/python-packages \
+    numpy==1.26.4 \
+    opencv-python-headless==4.10.0.84
+
+# Create final stage
+FROM --platform=linux/amd64 public.ecr.aws/lambda/python:3.11
+
+# Copy all libraries
+# All custom libraries, including libswresample.so.4, are now in /opt/lib
+COPY --from=builder /usr/local/lib /opt/lib
+COPY --from=builder /opt/python-packages /opt/python
+
+# Install runtime deps
+RUN yum install -y zlib libpng libjpeg-turbo zip && yum clean all
+
+# Create proper Lambda layer structure: python/lib/python3.11/site-packages
+WORKDIR /layer
+RUN mkdir -p python/lib/python3.11/site-packages
+
+# Copy Python packages to proper Lambda layer location
+RUN cp -r /opt/python/* /layer/python/lib/python3.11/site-packages/
+
+# 1. NEW LOGIC: Copy ALL shared libraries to the final /layer/lib folder.
+RUN mkdir -p /layer/lib && \
+    cp /opt/lib/*.so* /layer/lib/ 2>/dev/null || true
+
+# -------------------------------------------------------------------------
+# FINAL STAGE: CRITICAL FIX 2 & 3 - Deduplication and Stripping
+# -------------------------------------------------------------------------
+
+# 2. CRITICAL FIX: Deduplication. Remove the core libraries from /layer/lib 
+# (which is what gets zipped) since they will be duplicated in the python package folder.
+# This ensures libswresample.so.4 (and other auxiliary libs) remains.
+RUN echo "Starting deduplication in /layer/lib..." && \
+    rm -f /layer/lib/libavcodec.so* && \
+    rm -f /layer/lib/libavformat.so* && \
+    rm -f /layer/lib/libavutil.so* && \
+    rm -f /layer/lib/libx264.so*
+
+# 3. CRITICAL ADDITION: Strip debug symbols from ALL remaining libraries for size reduction.
+RUN echo "Stripping debug symbols..." && \
+    find /layer/lib -name "*.so*" -exec strip --strip-debug {} \; 2>/dev/null || true && \
+    find /layer/python -name "*.so*" -exec strip --strip-debug {} \; 2>/dev/null || true
+
+# Remove packages Lambda already provides to save space
+RUN cd /layer/python/lib/python3.11/site-packages && \
+    rm -rf boto3* botocore* s3transfer* urllib3* jmespath* dateutil* six* 2>/dev/null || true
+
+# -------------------------------------------------------------------------
+# FINAL STAGE: CRITICAL FIX 4 - Update copy names to FFmpeg 5.1.4 versions
+# -------------------------------------------------------------------------
+# 4. Replace OpenCV's bundled FFmpeg libs with our custom ones (This is necessary)
+RUN cd /layer/python/lib/python3.11/site-packages/opencv_python_headless.libs && \
+    rm -f libavcodec*.so.* libavformat*.so.* libavutil*.so.* && \
+    
+    # --- USE VERSIONED LINK AS SOURCE. THIS IS MORE ROBUST ---
+    cp /opt/lib/libavcodec.so.59 libavcodec-9aae324f.so.59.37.100 && \
+    cp /opt/lib/libavformat.so.59 libavformat-3ff1be5b.so.59.27.100 && \
+    cp /opt/lib/libavutil.so.57 libavutil-a0a0531e.so.57.28.100 && \
+    cp /opt/lib/libx264.so.165 libx264.so.165 || true
+
+# Clean up unnecessary files to reduce size
+RUN cd /layer/python/lib/python3.11/site-packages && \
+    # Remove all test directories
+    find . -type d -name "tests" -exec rm -rf {} + 2>/dev/null || true && \
+    find . -type d -name "test" -exec rm -rf {} + 2>/dev/null || true && \
+    # Remove dist-info metadata
+    find . -type d -name "*.dist-info" -exec rm -rf {} + 2>/dev/null || true && \
+    # Remove pycache and compiled files
+    find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true && \
+    find . -type f -name "*.pyc" -delete 2>/dev/null || true && \
+    find . -type f -name "*.pyo" -delete 2>/dev/null || true && \
+    # Remove type stubs (*.pyi files) - not needed at runtime
+    find . -type f -name "*.pyi" -delete 2>/dev/null || true && \
+    # Remove numpy docs and examples (Added new aggressive numpy cleanup)
+    rm -rf numpy/doc 2>/dev/null || true && \
+    rm -rf numpy/f2py/docs 2>/dev/null || true && \
+    rm -rf numpy/core/include 2>/dev/null || true && \
+    # Remove OpenCV data files we don't need (Haar cascades, etc.)
+    rm -rf cv2/data/*.xml 2>/dev/null || true
+
+# Test in container environment (These lines are fine for testing but are transient)
+# Removed the unnecessary /opt/lib from the LD_LIBRARY_PATH export since it's redundant to /layer/lib
+# Updated for robustness (for testing inside the build container):
+RUN export LD_LIBRARY_PATH=/layer/lib:/opt/lib:$LD_LIBRARY_PATH && \
+    export PYTHONPATH=/layer/python/lib/python3.11/site-packages:$PYTHONPATH
+# Check size
+RUN echo "Layer size:" && du -sh /layer
+
+# Create ZIP
+WORKDIR /output
+RUN cd /layer && zip -r -q /output/opencv-h264-working.zip . && \
+    ls -lh /output/opencv-h264-working.zip
+
+CMD ["cat", "/output/opencv-h264-working.zip"]

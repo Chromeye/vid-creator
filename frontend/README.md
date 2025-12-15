@@ -5,16 +5,19 @@ A React application for generating videos using Google's Gemini Veo 3 model via 
 ## Setup
 
 1. Install dependencies:
+
 ```bash
 npm install
 ```
 
 2. Create a `.env` file based on `.env.example`:
+
 ```bash
 cp .env.example .env
 ```
 
 3. Update the `.env` file with your Lambda function URL:
+
 ```
 VITE_API_URL=https://your-lambda-function-url.amazonaws.com
 ```
@@ -22,6 +25,7 @@ VITE_API_URL=https://your-lambda-function-url.amazonaws.com
 ## Development
 
 Run the development server:
+
 ```bash
 npm run dev
 ```
@@ -31,6 +35,7 @@ The app will be available at `http://localhost:5173`
 ## Building for Production
 
 Build the app:
+
 ```bash
 npm run build
 ```
@@ -53,3 +58,6 @@ The build output will be in the `dist` folder, ready to deploy to AWS Amplify.
 - View list of generated videos
 - Monitor video processing status
 - Download completed videos from S3
+- If video is on green screen, replace the background
+  - Choose either solid colour
+  - or a background image of the correct size: 1280x720

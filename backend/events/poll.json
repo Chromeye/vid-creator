@@ -1,4 +1,8 @@
 {
-  "videoId": "82e7934c-0c64-4aca-b893-9bf2d9ee5caf",
-  "jobName": "mock-job-f916f27f-88f7-48b3-ae3b-a1b8955b031"
+  "videoId": "688909b7-e8c4-4421-a59d-82d9d74220d5",
+  "jobName": "19e4641-a44c-7c82-a2a8-9af9c255c00b",
+  "provider": "fal",
+  "falModelId": "fal-ai/veo3.1/fast/image-to-video",
+  "falStatusUrl": "https://queue.fal.run/fal-ai/veo3.1/requests/019e4669-4cdc-7273-ab11-ea73f48d2791/status",
+  "falResultUrl": "https://queue.fal.run/fal-ai/veo3.1/requests/019e4669-4cdc-7273-ab11-ea73f48d2791"
 }

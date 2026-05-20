@@ -46,7 +46,7 @@ function App() {
       <div className='app'>
         <header className='app-header'>
           <h1>Streameye PoC Video Generator</h1>
-          <p>Generate videos from images and prompts using Google's Veo 3 video creator</p>
+          <p>Generate videos from images and prompts using Veo 3.1 and Kling 3.0</p>
         </header>
 
         {notification && <div className={`notification ${notification.type}`}>{notification.message}</div>}
@@ -57,7 +57,7 @@ function App() {
         </main>
 
         <footer className='app-footer'>
-          <p>AWS Lambda + Google Veo 3</p>
+          <p>AWS Lambda + Veo 3.1 | Kling 3.0</p>
         </footer>
       </div>
     </MainContextProvider>

@@ -16,6 +16,26 @@ Parameters:
     NoEcho: true
     Description: Google Gemini API Key
 
+  EvoLinkApiKey:
+    Type: String
+    NoEcho: true
+    Default: ''
+    Description: EvoLink.ai API Key (for Kling and other aggregated models)
+
+  FalApiKey:
+    Type: String
+    NoEcho: true
+    Default: ''
+    Description: fal.ai API Key (alternative inference provider)
+
+  InferenceProvider:
+    Type: String
+    Default: evolink
+    AllowedValues:
+      - evolink
+      - fal
+    Description: Which inference API to use for video generation
+
 Globals:
   Function:
     Timeout: 300
@@ -26,6 +46,9 @@ Globals:
         ENVIRONMENT: !Ref Environment
         VIDEOS_BUCKET: !Ref VideosBucket
         GEMINI_API_KEY: !Ref GeminiApiKey
+        EVOLINK_API_KEY: !Ref EvoLinkApiKey
+        FAL_API_KEY: !Ref FalApiKey
+        INFERENCE_PROVIDER: !Ref InferenceProvider
 
 Resources:
   # S3 Bucket for storing generated videos (private, accessed via signed URLs)
@@ -78,6 +101,8 @@ Resources:
       FunctionName: !Sub '${AWS::StackName}-generator-${Environment}'
       CodeUri: ./src
       Handler: handler.lambda_handler
+      Architectures:
+        - arm64
       Environment:
         Variables:
           VIDEOS_TABLE: !Ref VideosTable
@@ -150,6 +175,8 @@ Resources:
       FunctionName: !Sub '${AWS::StackName}-background-processor-${Environment}'
       CodeUri: ./src
       Handler: background_processor_lambda.lambda_handler
+      Architectures:
+        - x86_64  # opencv-h264-working layer is x86_64-specific
       Timeout: 900 # 15 minutes
       MemorySize: 3008 # 3 GB for video processing
       EphemeralStorage:
@@ -171,6 +198,8 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub '${AWS::StackName}-poller-${Environment}'
+      Architectures:
+        - arm64
       CodeUri: ./src
       Handler: poller.lambda_handler
       Environment:

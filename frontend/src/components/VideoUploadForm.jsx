@@ -68,7 +68,7 @@ export default function VideoUploadForm({ onSubmit }) {
   };
   return (
     <div className='upload-form'>
-      <h2>Generate Video with Gemini Veo 3</h2>
+      <h2>Generate Video</h2>
 
       <form onSubmit={handleSubmit} ref={formRef} className='form-body'>
         <div className='form-group'>
@@ -80,8 +80,9 @@ export default function VideoUploadForm({ onSubmit }) {
             onChange={(e) => context.updateValue('model', e.target.value)}
             disabled={isSubmitting}
           >
-            <option value='gemini-veo-31-fast'>Gemini Veo 3.1 Fast</option>
-            <option value='gemini-veo-31'>Gemini Veo 3.1</option>
+            <option value='gemini-veo-31-fast'>Veo 3.1 Fast</option>
+            <option value='gemini-veo-31'>Veo 3.1</option>
+            <option value='kling-v3-image-to-video'>Kling 3.0 Standard</option>
           </select>
         </div>
         <div className='form-group'>

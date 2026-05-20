@@ -3,7 +3,6 @@ import os
 import time
 import boto3
 import requests
-from botocore.exceptions import ClientError
 
 # Initialize AWS clients
 s3_client = boto3.client('s3')
@@ -12,133 +11,169 @@ dynamodb = boto3.resource('dynamodb')
 # Environment variables
 VIDEOS_BUCKET = os.environ['VIDEOS_BUCKET']
 VIDEOS_TABLE = os.environ['VIDEOS_TABLE']
-GEMINI_API_KEY = os.environ['GEMINI_API_KEY']
+EVOLINK_API_KEY = os.environ.get('EVOLINK_API_KEY', '')
+FAL_API_KEY = os.environ.get('FAL_API_KEY', '')
 
 # DynamoDB table
 videos_table = dynamodb.Table(VIDEOS_TABLE)
 
-STATUS_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/"
-
-
-def get_nested(data, keys, default=None):
-    """Get nested value using list of keys"""
-    for key in keys:
-        try:
-            data = data[key]
-        except (KeyError, TypeError, IndexError):
-            return default
-    return data
+EVOLINK_TASKS_URL = "https://api.evolink.ai/v1/tasks/"
+FAL_QUEUE_BASE = "https://queue.fal.run"
 
 
 def lambda_handler(event, context):
-    """Poll Gemini job status and update DynamoDB when complete"""
+    """Poll EvoLink job status and update DynamoDB when complete"""
 
     print(f"Poller event: {json.dumps(event)}")
 
     video_id = event['videoId']
-    job_name = event['jobName']
+    task_id = event['jobName']
+    provider = event.get('provider', 'evolink')
+    fal_model_id = event.get('falModelId')
+    fal_status_url = event.get('falStatusUrl')
+    fal_result_url = event.get('falResultUrl')
 
-    # Check if we're in mock mode
-    use_mock = os.environ.get('USE_MOCK_GEMINI', 'false').lower() == 'true'
+    # 10 minute ceiling (120 x 5 s); covers Kling at max 15 s video + queue time
+    max_polls = 120
+    poll_count = 0
 
     try:
-        if use_mock:
-            # Mock mode: simulate video generation
-            print(f"[MOCK MODE] Simulating video generation for {video_id}")
-            time.sleep(8)  # Simulate 8 seconds of processing
-
-            # Create fake S3 URL (don't actually upload in mock mode)
-            s3_url = f"https://{VIDEOS_BUCKET}.s3.amazonaws.com/videos/{video_id}.mp4"
-            print(f"[MOCK MODE] Generated fake video URL: {s3_url}")
-
-            # Update DynamoDB
-            timestamp = int(time.time() * 1000)
-            videos_table.update_item(
-                Key={'id': video_id},
-                UpdateExpression='SET #status = :status, videoUrl = :url, updatedAt = :updated',
-                ExpressionAttributeNames={'#status': 'status'},
-                ExpressionAttributeValues={
-                    ':status': 'completed',
-                    ':url': s3_url,
-                    ':updated': timestamp
-                }
-            )
-
-            print(f"[MOCK MODE] Video completed and uploaded: {s3_url}")
-            return {'statusCode': 200, 'videoId': video_id, 'status': 'completed'}
-
-        # Real mode: Poll Gemini job status
-        max_polls = 60  # 5 minutes max (60 * 5 seconds)
-        poll_count = 0
-
         while poll_count < max_polls:
-            status = check_job_status(job_name)
-            print(f"Polled status for job {job_name}: {json.dumps(status)}")
-            if status.get('done'):
-                print(f"Job completed for video: {video_id}")
+            if provider == 'fal':
+                status = _check_fal_status(fal_model_id, task_id, fal_status_url, fal_result_url)
+            else:
+                status = check_evolink_job_status(task_id)
+            job_status = status.get('status')
+            print(f"Poll {poll_count + 1}: task {task_id} status={job_status}")
 
-                # Extract video URL
-                video_url = get_nested(
-                    status,
-                    ['response', 'generateVideoResponse',
-                        'generatedSamples', 0, 'video', 'uri'],
-                    default=None
-                )
+            if job_status == 'completed':
+                results = status.get('results') or []
+                video_url = results[0] if results else None
 
                 if video_url:
-                    print(f"Video URL: {video_url}")
-
-                    # Download video from Gemini
                     video_data = download_video(video_url)
-
-                    # Upload to S3
                     s3_url = upload_video_to_s3(video_id, video_data)
+                    cleanup_temp_images(video_id)
 
-                    # Update DynamoDB
                     timestamp = int(time.time() * 1000)
                     videos_table.update_item(
                         Key={'id': video_id},
-                        UpdateExpression='SET #status = :status, videoUrl = :url, updatedAt = :updated',
-                        ExpressionAttributeNames={'#status': 'status'},
+                        UpdateExpression='SET #status = :status, videoUrl = :url, updatedAt = :updated REMOVE #error',
+                        ExpressionAttributeNames={'#status': 'status', '#error': 'error'},
                         ExpressionAttributeValues={
                             ':status': 'completed',
                             ':url': s3_url,
                             ':updated': timestamp
                         }
                     )
-
                     print(f"Video completed and uploaded: {s3_url}")
                     return {'statusCode': 200, 'videoId': video_id, 'status': 'completed'}
-                else:
-                    # Job done but no video URL (error case)
-                    error_msg = get_nested(
-                        status, ['response', 'generateVideoResponse', 'raiMediaFilteredReasons'], 'Unknown error')
-                    if type(error_msg) == list:
-                        error_msg = ', '.join(error_msg)
-                    print(f"Job failed: {error_msg}")
 
-                    timestamp = int(time.time() * 1000)
-                    videos_table.update_item(
-                        Key={'id': video_id},
-                        UpdateExpression='SET #status = :status, #error = :error, updatedAt = :updated',
-                        ExpressionAttributeNames={
-                            '#status': 'status', '#error': 'error'},
-                        ExpressionAttributeValues={
-                            ':status': 'failed',
-                            ':error': error_msg,
-                            ':updated': timestamp
-                        }
-                    )
+                # Completed signal but no video URL — treat as failure
+                error_msg = status.get('error') or 'No video URL in completed response'
+                print(f"Job completed with no video URL: {error_msg}")
+                _mark_failed(video_id, error_msg)
+                cleanup_temp_images(video_id)
+                return {'statusCode': 500, 'videoId': video_id, 'status': 'failed', 'error': error_msg}
 
-                    return {'statusCode': 500, 'videoId': video_id, 'status': 'failed', 'error': error_msg}
+            if job_status == 'failed':
+                error_msg = status.get('error') or 'Video generation failed'
+                print(f"Job failed: {error_msg}")
+                _mark_failed(video_id, error_msg)
+                cleanup_temp_images(video_id)
+                return {'statusCode': 500, 'videoId': video_id, 'status': 'failed', 'error': error_msg}
 
-            # Job still processing, wait and retry
+            # pending / processing — wait and retry
             poll_count += 1
             if poll_count < max_polls:
                 time.sleep(5)
 
-        # Timeout - mark as failed
+        # Timed out
         print(f"Job timed out for video: {video_id}")
+        _mark_failed(video_id, 'Video generation timed out')
+        cleanup_temp_images(video_id)
+        return {'statusCode': 408, 'videoId': video_id, 'status': 'timeout'}
+
+    except Exception as e:
+        print(f"Error in poller: {str(e)}")
+        _mark_failed(video_id, str(e))
+        cleanup_temp_images(video_id)
+        return {'statusCode': 500, 'error': str(e)}
+
+
+def check_evolink_job_status(task_id):
+    """GET task status from EvoLink"""
+    headers = {'Authorization': f'Bearer {EVOLINK_API_KEY}'}
+    response = requests.get(EVOLINK_TASKS_URL + task_id, headers=headers)
+    response.raise_for_status()
+    return response.json()
+
+
+def download_video(video_url):
+    """Download video from EvoLink CDN (no auth required on result URLs)"""
+    print(f"Downloading video from: {video_url}")
+    response = requests.get(video_url, stream=True)
+    response.raise_for_status()
+    return response.content
+
+
+def upload_video_to_s3(video_id, video_data):
+    """Upload video bytes to S3 and return a 7-day presigned URL"""
+    key = f"videos/{video_id}.mp4"
+    s3_client.put_object(
+        Bucket=VIDEOS_BUCKET,
+        Key=key,
+        Body=video_data,
+        ContentType='video/mp4'
+    )
+    url = s3_client.generate_presigned_url(
+        'get_object',
+        Params={'Bucket': VIDEOS_BUCKET, 'Key': key},
+        ExpiresIn=604800  # 7 days
+    )
+    return url
+
+
+def cleanup_temp_images(video_id):
+    """Delete the short-lived reference images uploaded to S3 before the EvoLink call"""
+    if os.environ.get('DEBUG_KEEP_TEMP_IMAGES'):
+        print(f"DEBUG_KEEP_TEMP_IMAGES set — skipping cleanup for video {video_id}")
+        return
+    for suffix in ('start', 'end'):
+        key = f"temp-images/{video_id}-{suffix}.jpg"
+        try:
+            s3_client.delete_object(Bucket=VIDEOS_BUCKET, Key=key)
+            print(f"Deleted temp image: {key}")
+        except Exception as e:
+            print(f"Warning: could not delete {key}: {e}")
+
+
+def _check_fal_status(fal_model_id, request_id, fal_status_url=None, fal_result_url=None):
+    """Poll fal.ai queue and return a normalized status dict matching evolink shape."""
+    status_url = fal_status_url or f"{FAL_QUEUE_BASE}/{fal_model_id}/requests/{request_id}/status"
+    headers = {'Authorization': f'Key {FAL_API_KEY}'}
+    response = requests.get(status_url, headers=headers)
+    response.raise_for_status()
+    raw = response.json()
+    fal_status = raw.get('status')
+
+    if fal_status == 'COMPLETED':
+        result_url = fal_result_url or f"{FAL_QUEUE_BASE}/{fal_model_id}/requests/{request_id}"
+        result_response = requests.get(result_url, headers=headers)
+        result_response.raise_for_status()
+        video_url = result_response.json().get('video', {}).get('url')
+        return {'status': 'completed', 'results': [video_url]}
+
+    if fal_status in ('IN_QUEUE', 'IN_PROGRESS'):
+        return {'status': 'processing'}
+
+    error = raw.get('error') or f'Unexpected fal.ai status: {fal_status}'
+    return {'status': 'failed', 'error': error}
+
+
+def _mark_failed(video_id, error_msg):
+    """Write a failed status to DynamoDB"""
+    try:
         timestamp = int(time.time() * 1000)
         videos_table.update_item(
             Key={'id': video_id},
@@ -146,83 +181,9 @@ def lambda_handler(event, context):
             ExpressionAttributeNames={'#status': 'status', '#error': 'error'},
             ExpressionAttributeValues={
                 ':status': 'failed',
-                ':error': 'Video generation timed out',
+                ':error': error_msg,
                 ':updated': timestamp
             }
         )
-
-        return {'statusCode': 408, 'videoId': video_id, 'status': 'timeout'}
-
-    except Exception as e:
-        print(f"Error in poller: {str(e)}")
-
-        # Update DynamoDB with error
-        try:
-            timestamp = int(time.time() * 1000)
-            videos_table.update_item(
-                Key={'id': video_id},
-                UpdateExpression='SET #status = :status, #error = :error, updatedAt = :updated',
-                ExpressionAttributeNames={
-                    '#status': 'status', '#error': 'error'},
-                ExpressionAttributeValues={
-                    ':status': 'failed',
-                    ':error': str(e),
-                    ':updated': timestamp
-                }
-            )
-        except Exception as update_error:
-            print(f"Failed to update DynamoDB: {str(update_error)}")
-
-        return {'statusCode': 500, 'error': str(e)}
-
-
-def check_job_status(job_name):
-    """Check the status of a Gemini video generation job"""
-    headers = {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': GEMINI_API_KEY
-    }
-    url = STATUS_ENDPOINT + job_name
-    response = requests.get(url, headers=headers)
-    return json.loads(response.content)
-
-
-def download_video(video_url):
-    """Download video from Gemini URL"""
-    print(f"Downloading video from: {video_url}")
-    headers = {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': GEMINI_API_KEY
-    }
-    response = requests.get(video_url, headers=headers)
-    response.raise_for_status()
-    return response.content
-
-
-def upload_video_to_s3(video_id, video_data):
-    """Upload generated video to S3 and return pre-signed URL"""
-    try:
-        key = f"videos/{video_id}.mp4"
-
-        s3_client.put_object(
-            Bucket=VIDEOS_BUCKET,
-            Key=key,
-            Body=video_data,
-            ContentType='video/mp4'
-        )
-
-        # Generate pre-signed URL (valid for 7 days)
-        url = s3_client.generate_presigned_url(
-            'get_object',
-            Params={
-                'Bucket': VIDEOS_BUCKET,
-                'Key': key
-            },
-            ExpiresIn=604800  # 7 days in seconds
-        )
-
-        return url
-
-    except ClientError as e:
-        print(f"Error uploading to S3: {str(e)}")
-        raise
+    except Exception as update_error:
+        print(f"Failed to update DynamoDB for {video_id}: {str(update_error)}")

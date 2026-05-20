@@ -20,7 +20,9 @@ export const getModelLabel = (model) => {
       return { name: 'Veo 3', className: 'pro' };
     case 'gemini-veo-3-fast':
       return { name: 'Veo 3 Fast', className: '' };
+    case 'kling-v3-image-to-video':
+      return { name: 'Kling 3.0 Standard', className: '' };
     default:
-      return model;
+      return { name: model, className: '' };
   }
 };

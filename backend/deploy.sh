@@ -32,6 +32,9 @@ sam deploy \
     --parameter-overrides \
         Environment=${ENVIRONMENT:-prod} \
         GeminiApiKey=$GEMINI_API_KEY \
+        EvoLinkApiKey=${EVOLINK_API_KEY:-} \
+        FalApiKey=${FAL_API_KEY:-} \
+        InferenceProvider=${INFERENCE_PROVIDER:-evolink} \
     --capabilities CAPABILITY_IAM
 
 if [ $? -eq 0 ]; then

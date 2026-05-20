@@ -169,7 +169,7 @@ export default function VideoList({ refreshTrigger }) {
               )}
               {video.status === 'failed' && (
                 <div className='video-actions'>
-                  <p className='error-text'>Video generation failed with error: {video.error}.</p>
+                  <p className='error-text'>Video generation failed with error: {typeof video.error === 'object' ? JSON.stringify(video.error) : video.error}.</p>
                   <button onClick={() => handleDelete(video.id)} disabled={deletingVideos.has(video.id)} className='delete-btn'>
                     {deletingVideos.has(video.id) ? 'Deleting...' : 'Delete'}
                   </button>

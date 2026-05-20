@@ -8,7 +8,7 @@ const getHeaders = () => {
   return headers;
 };
 
-export const generateVideo = async ({ prompt, image, model }) => {
+export const generateVideo = async ({ prompt, image, model, resolution }) => {
   // Convert image files to base64
   const convertToBase64 = (file) => {
     return new Promise((resolve, reject) => {
@@ -41,6 +41,7 @@ export const generateVideo = async ({ prompt, image, model }) => {
       prompt,
       image: imageData,
       model,
+      resolution,
     }),
   });
 

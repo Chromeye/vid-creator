@@ -12,9 +12,9 @@ function App() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [notification, setNotification] = useState(null);
 
-  const handleVideoSubmit = async ({ prompt, image, model }) => {
+  const handleVideoSubmit = async ({ prompt, image, model, resolution }) => {
     try {
-      const result = await generateVideo({ prompt, image, model });
+      const result = await generateVideo({ prompt, image, model, resolution });
 
       setNotification({
         type: 'success',

@@ -108,6 +108,7 @@ def handle_generate_video(event, context):
         user_prompt = data.get('prompt')
         image_dict = data.get('image')
         model = data.get('model', 'gemini-veo-31-fast')
+        resolution = data.get('resolution', '1080p')
 
         if not user_prompt:
             return create_response(400, {'error': 'Prompt is required'})
@@ -138,12 +139,12 @@ def handle_generate_video(event, context):
         fal_result_url = None
         if INFERENCE_PROVIDER == 'fal':
             task_id, fal_model_id, fal_status_url, fal_result_url = start_fal_job(
-                video_id, full_prompt, model, start_image_bytes, end_image_bytes)
+                video_id, full_prompt, model, start_image_bytes, end_image_bytes, resolution)
             print(f"Started fal.ai job: {task_id} for video: {video_id}")
             provider = 'fal'
         else:
             task_id = start_evolink_job(
-                video_id, full_prompt, model, start_image_bytes, end_image_bytes)
+                video_id, full_prompt, model, start_image_bytes, end_image_bytes, resolution)
             print(f"Started EvoLink job: {task_id} for video: {video_id}")
             provider = 'evolink'
 
@@ -152,6 +153,7 @@ def handle_generate_video(event, context):
             'prompt': user_prompt,
             'model': model,
             'provider': provider,
+            'resolution': resolution,
             'status': 'processing',
             'jobName': task_id,
             'createdAt': timestamp,
@@ -195,7 +197,7 @@ def handle_generate_video(event, context):
         return create_response(500, {'error': str(e)})
 
 
-def start_evolink_job(video_id, prompt, model, start_image_bytes, end_image_bytes=None):
+def start_evolink_job(video_id, prompt, model, start_image_bytes, end_image_bytes=None, resolution='1080p'):
     """Upload ref images to S3 temp prefix, build presigned URLs, and submit to EvoLink.ai."""
 
     start_key = f"temp-images/{video_id}-start.jpg"
@@ -238,7 +240,7 @@ def start_evolink_job(video_id, prompt, model, start_image_bytes, end_image_byte
             'model': evolink_model,
             'prompt': prompt,
             'image_start': start_url,
-            'quality': '1080p',
+            'quality': resolution,
             'sound': 'off',
             'duration': 8
         }
@@ -255,7 +257,7 @@ def start_evolink_job(video_id, prompt, model, start_image_bytes, end_image_byte
             'image_urls': image_urls,
             'generation_type': 'FIRST&LAST',
             'aspect_ratio': '16:9',
-            'quality': '1080p',
+            'quality': resolution,
             'generate_audio': False,
             'duration': 8
         }
@@ -276,7 +278,7 @@ def start_evolink_job(video_id, prompt, model, start_image_bytes, end_image_byte
     return task_id
 
 
-def start_fal_job(video_id, prompt, model, start_image_bytes, end_image_bytes=None):
+def start_fal_job(video_id, prompt, model, start_image_bytes, end_image_bytes=None, resolution='1080p'):
     """Upload ref images to S3 temp prefix, build presigned URLs, and submit to fal.ai queue."""
 
     start_key = f"temp-images/{video_id}-start.jpg"
@@ -329,7 +331,7 @@ def start_fal_job(video_id, prompt, model, start_image_bytes, end_image_bytes=No
             'prompt': prompt,
             'aspect_ratio': '16:9',
             'duration': '8s',
-            'resolution': '1080p',
+            'resolution': resolution,
             'generate_audio': False,
         }
 

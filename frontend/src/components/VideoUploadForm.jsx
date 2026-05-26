@@ -2,8 +2,9 @@ import { useState, useRef } from 'react';
 import { useMyContext } from '../context/context-provider';
 
 const VALID_DIMS = {
-  '1280x720': '720p',
-  '1920x1080': '1080p',
+  '1080x1920': ['9:16', '1080p'],
+  '1920x1080': ['16:9', '1080p'],
+  '1080x1080': ['1:1', '1080p'],
 };
 
 export default function VideoUploadForm({ onSubmit }) {
@@ -34,14 +35,14 @@ export default function VideoUploadForm({ onSubmit }) {
       if (!detected) {
         setError((current) => ({
           ...current,
-          [pos]: 'Image must be 1280×720 (720p) or 1920×1080 (1080p) at 16:9',
+          [pos]: 'Required: 1080p in 1920x1080 (16:9), 1080x1920 (9:16) or 1080x1080 (1:1)',
         }));
         setImage((current) => ({ ...current, [pos]: null }));
         setPreview((current) => ({ ...current, [pos]: null }));
         return;
       }
 
-      if (pos === 'end' && resolution && detected !== resolution) {
+      if (pos === 'end' && resolution && detected[0] !== resolution[0]) {
         setError((current) => ({
           ...current,
           end: `Final frame must match start frame resolution (${resolution})`,
@@ -65,9 +66,7 @@ export default function VideoUploadForm({ onSubmit }) {
     img.src = URL.createObjectURL(file);
   };
 
-  const isEmptyObject = (obj) =>
-    (Object.keys(obj).length === 0 || Object.keys(obj).every((key) => obj[key] == null)) &&
-    obj.constructor === Object;
+  const isEmptyObject = (obj) => (Object.keys(obj).length === 0 || Object.keys(obj).every((key) => obj[key] == null)) && obj.constructor === Object;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -130,18 +129,10 @@ export default function VideoUploadForm({ onSubmit }) {
 
         <div className='form-group'>
           <label htmlFor='image'>
-            Start frame reference (1280×720 or 1920×1080, 16:9, JPG/PNG)
-            {resolution && <span className='resolution-badge'> — {resolution} detected</span>}
-            :
+            Start frame reference (1920x1080 in 16:9, 1080x1920 in 9:16, 1080x1080 in 1:1, JPG/PNG)
+            {resolution && <span className='resolution-badge'> — {resolution.join(', ')} detected</span>}:
           </label>
-          <input
-            id='image'
-            type='file'
-            accept='image/jpeg,image/png'
-            onChange={handleImageChange}
-            disabled={isSubmitting}
-            required
-          />
+          <input id='image' type='file' accept='image/jpeg,image/png' onChange={handleImageChange} disabled={isSubmitting} required />
           {error.start && <p className='error-message'>{error.start}</p>}
         </div>
 
@@ -164,17 +155,8 @@ export default function VideoUploadForm({ onSubmit }) {
 
         {showFinalFrame && (
           <div className='form-group'>
-            <label htmlFor='imageEnd'>
-              Final frame reference (must match start: {resolution ?? '720p or 1080p'}, JPG/PNG):
-            </label>
-            <input
-              id='imageEnd'
-              type='file'
-              accept='image/jpeg,image/png'
-              onChange={(e) => handleImageChange(e, 'end')}
-              disabled={isSubmitting || !image.start}
-              required
-            />
+            <label htmlFor='imageEnd'>Final frame reference (must match start: {resolution ?? '1080p (9:16, 16:9, 1:1)'}, JPG/PNG):</label>
+            <input id='imageEnd' type='file' accept='image/jpeg,image/png' onChange={(e) => handleImageChange(e, 'end')} disabled={isSubmitting || !image.start} required />
             {error.end && <p className='error-message'>{error.end}</p>}
           </div>
         )}
@@ -186,10 +168,7 @@ export default function VideoUploadForm({ onSubmit }) {
           </div>
         )}
         {error.general && <p className='error-message'>{error.general}</p>}
-        <button
-          type='submit'
-          disabled={isSubmitting || !(image.start && context.data.prompt) || (showFinalFrame && !image.end)}
-        >
+        <button type='submit' disabled={isSubmitting || !(image.start && context.data.prompt) || (showFinalFrame && !image.end)}>
           {isSubmitting ? 'Submitting...' : 'Generate Video'}
         </button>
       </form>

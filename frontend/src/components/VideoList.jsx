@@ -10,7 +10,7 @@ export default function VideoList({ refreshTrigger }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showVideoId, setShowVideoId] = useState(null);
-  const [replaceBackgroundVideoId, setReplaceBackgroundVideoId] = useState(null);
+  const [replaceBackgroundVideo, setReplaceBackgroundVideo] = useState(null);
   const [refreshingUrls, setRefreshingUrls] = useState(new Set());
   const [deletingVideos, setDeletingVideos] = useState(new Set());
 
@@ -131,8 +131,14 @@ export default function VideoList({ refreshTrigger }) {
                 <div className='video-status'>
                   <span>
                     <span className='status-indicator' style={{ backgroundColor: getStatusColor(video.status) }} />
-                    <span>{video.status}</span>
+                    <span className={`status-text ${video.status}`}>{video.status}</span>
                   </span>
+
+                  {video.resolution && (
+                    <div>
+                      Resolution: <span className='video-resolution'>{video.resolution}</span>
+                    </div>
+                  )}
                   {video.model && (
                     <div>
                       Model: <span className={`video-model ${getModelLabel(video.model).className}`}>{getModelLabel(video.model).name}</span>
@@ -157,7 +163,7 @@ export default function VideoList({ refreshTrigger }) {
                       <button onClick={() => context.updateValue('prompt', video.prompt)} className='edit-prompt-btn'>
                         Reuse Prompt
                       </button>
-                      <button onClick={() => setReplaceBackgroundVideoId(video.id)} className='edit-prompt-btn'>
+                      <button onClick={() => setReplaceBackgroundVideo(video)} className='edit-prompt-btn'>
                         *Replace Background
                       </button>
                       <button onClick={() => handleDelete(video.id)} disabled={deletingVideos.has(video.id)} className='delete-btn'>
@@ -191,17 +197,16 @@ export default function VideoList({ refreshTrigger }) {
           <VideoViewer id={showVideoId} onClose={() => setShowVideoId(null)} />
         </div>
       )}
-      {replaceBackgroundVideoId && (
+      {replaceBackgroundVideo && (
         <div className='video-modal'>
-          <VideoReplaceBackground
-            id={replaceBackgroundVideoId}
-            onClose={() => setReplaceBackgroundVideoId(null)}
-          />
+          <VideoReplaceBackground id={replaceBackgroundVideo.id} resolution={replaceBackgroundVideo.resolution} onClose={() => setReplaceBackgroundVideo(null)} />
         </div>
       )}
-      <div className='footnote'>* Replace Background feature only works if the video is generated with green screen!
+      <div className='footnote'>
+        * Replace Background feature only works if the video is generated with green screen!
         <br />
-        Colour code for green screen is: <span className='footnote-colour'>RGB (0, 171, 69) or HEX: #00AA45</span></div>
+        Colour code for green screen is: <span className='footnote-colour'>RGB (0, 171, 69) or HEX: #00AA45</span>
+      </div>
     </div>
   );
 }

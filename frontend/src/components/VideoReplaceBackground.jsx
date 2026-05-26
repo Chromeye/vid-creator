@@ -3,7 +3,17 @@ import { ChromePicker } from 'react-color';
 import { useOnClickOutside } from '../utils/useOnClickOutside';
 import { replaceVideoBackground } from '../services/api';
 
-export const VideoReplaceBackground = ({ id, onClose }) => {
+const getExpectedDims = (resolution) => {
+    const r = (resolution || '').toLowerCase();
+    if (r.includes('9:16')) return { width: 1080, height: 1920 };
+    if (r.includes('1:1')) return { width: 1080, height: 1080 };
+    if (r.includes('720p')) return { width: 1280, height: 720 };
+    // '16:9, 1080p' and legacy '1080p' both fall through here
+    return { width: 1920, height: 1080 };
+};
+
+export const VideoReplaceBackground = ({ id, resolution, onClose }) => {
+    const expected = getExpectedDims(resolution);
     const [selectedFile, setSelectedFile] = useState(null);
     const [selectedColor, setSelectedColor] = useState(null);
     const [error, setError] = useState('');
@@ -28,8 +38,8 @@ export const VideoReplaceBackground = ({ id, onClose }) => {
         const objectUrl = URL.createObjectURL(file);
 
         img.onload = () => {
-            if (img.width !== 1280 || img.height !== 720) {
-                setError('Image dimensions must be exactly 1280x720 pixels.');
+            if (img.width !== expected.width || img.height !== expected.height) {
+                setError(`Image dimensions must be exactly ${expected.width}x${expected.height} pixels to match the video.`);
                 URL.revokeObjectURL(objectUrl);
                 setSelectedFile(null);
                 setPreviewUrl(null);
@@ -83,7 +93,7 @@ export const VideoReplaceBackground = ({ id, onClose }) => {
                     <div className='upload-image'>
                         <div className='fields'>
                             <div className="form-group">
-                                <label>Upload Image (1280x720 JPG)</label>
+                                <label>Upload Image ({expected.width}x{expected.height} JPG)</label>
                                 <input
                                     type='file'
                                     accept='.jpg, .jpeg'

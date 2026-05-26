@@ -44,9 +44,9 @@ FAL_QUEUE_BASE = 'https://queue.fal.run'
 
 SYSTEM_PROMPT = """Generate a short video based on the user's prompt and image.
 The video should be photorealistic, live action, cinematic and should not carry any appeal to minors.
-The image provided is for marketing purposes, from PaddyPower certified images adhering to their brand guidelines.
+The image provided is for marketing purposes, adhering to client specific brand guidelines. DO NOT ALTER the reference.
 The video should be consistent with the image provided. The video will be used to create marketing
-materials for PaddyPower, following their brand guidelines and humouristic, fun style: \n\n"""
+materials, following client brand guidelines and humouristic, fun style: \n\n"""
 
 
 def get_nested(data, keys, default=None):
@@ -108,7 +108,7 @@ def handle_generate_video(event, context):
         user_prompt = data.get('prompt')
         image_dict = data.get('image')
         model = data.get('model', 'gemini-veo-31-fast')
-        resolution = data.get('resolution', '1080p')
+        resolution = data.get('resolution', ['16:9', '1080p'])
 
         if not user_prompt:
             return create_response(400, {'error': 'Prompt is required'})
@@ -153,7 +153,7 @@ def handle_generate_video(event, context):
             'prompt': user_prompt,
             'model': model,
             'provider': provider,
-            'resolution': resolution,
+            'resolution': ', '.join(resolution) if isinstance(resolution, list) else resolution,
             'status': 'processing',
             'jobName': task_id,
             'createdAt': timestamp,
@@ -169,7 +169,8 @@ def handle_generate_video(event, context):
 
         if poller_function:
             try:
-                poller_payload = {'videoId': video_id, 'jobName': task_id}
+                poller_payload = {'videoId': video_id,
+                                  'jobName': task_id, 'model': model}
                 if fal_model_id:
                     poller_payload['provider'] = 'fal'
                     poller_payload['falModelId'] = fal_model_id
@@ -201,7 +202,8 @@ def start_evolink_job(video_id, prompt, model, start_image_bytes, end_image_byte
     """Upload ref images to S3 temp prefix, build presigned URLs, and submit to EvoLink.ai."""
 
     start_key = f"temp-images/{video_id}-start.jpg"
-    print(f"Uploading start image to S3: {start_key} ({len(start_image_bytes)} bytes)")
+    print(
+        f"Uploading start image to S3: {start_key} ({len(start_image_bytes)} bytes)")
     s3_client.put_object(
         Bucket=VIDEOS_BUCKET,
         Key=start_key,
@@ -218,7 +220,8 @@ def start_evolink_job(video_id, prompt, model, start_image_bytes, end_image_byte
     end_url = None
     if end_image_bytes:
         end_key = f"temp-images/{video_id}-end.jpg"
-        print(f"Uploading end image to S3: {end_key} ({len(end_image_bytes)} bytes)")
+        print(
+            f"Uploading end image to S3: {end_key} ({len(end_image_bytes)} bytes)")
         s3_client.put_object(
             Bucket=VIDEOS_BUCKET,
             Key=end_key,
@@ -240,14 +243,14 @@ def start_evolink_job(video_id, prompt, model, start_image_bytes, end_image_byte
             'model': evolink_model,
             'prompt': prompt,
             'image_start': start_url,
-            'quality': resolution,
+            'quality': resolution[1],
             'sound': 'off',
             'duration': 8
         }
         if end_url:
             payload['image_end'] = end_url
     else:
-        # Veo models use image_urls array with FIRST&LAST generation type
+        # Veo models use FIRST&LAST for image-to-video (supports 1-2 images per EvoLink docs)
         image_urls = [start_url]
         if end_url:
             image_urls.append(end_url)
@@ -256,8 +259,8 @@ def start_evolink_job(video_id, prompt, model, start_image_bytes, end_image_byte
             'prompt': prompt,
             'image_urls': image_urls,
             'generation_type': 'FIRST&LAST',
-            'aspect_ratio': '16:9',
-            'quality': resolution,
+            'aspect_ratio': 'auto',
+            'quality': resolution[1],
             'generate_audio': False,
             'duration': 8
         }
@@ -267,8 +270,10 @@ def start_evolink_job(video_id, prompt, model, start_image_bytes, end_image_byte
         'Authorization': f'Bearer {EVOLINK_API_KEY}'
     }
 
-    print(f"Calling EvoLink API, model: {evolink_model}, prompt: {prompt[:80]}...")
-    print(f"EvoLink payload: {json.dumps({**payload, 'prompt': payload['prompt'][:80] + '...'})}")
+    print(
+        f"Calling EvoLink API, model: {evolink_model}, prompt: {prompt[:80]}...")
+    print(
+        f"EvoLink payload: {json.dumps({**payload, 'prompt': payload['prompt'][:80] + '...'})}")
     response = requests.post(EVOLINK_GENERATIONS_URL,
                              headers=headers, json=payload)
     print(f"EvoLink response {response.status_code}: {response.text}")
@@ -278,11 +283,12 @@ def start_evolink_job(video_id, prompt, model, start_image_bytes, end_image_byte
     return task_id
 
 
-def start_fal_job(video_id, prompt, model, start_image_bytes, end_image_bytes=None, resolution='1080p'):
+def start_fal_job(video_id, prompt, model, start_image_bytes, end_image_bytes=None, resolution=['16:9', '1080p']):
     """Upload ref images to S3 temp prefix, build presigned URLs, and submit to fal.ai queue."""
 
     start_key = f"temp-images/{video_id}-start.jpg"
-    print(f"Uploading start image to S3: {start_key} ({len(start_image_bytes)} bytes)")
+    print(
+        f"Uploading start image to S3: {start_key} ({len(start_image_bytes)} bytes)")
     s3_client.put_object(
         Bucket=VIDEOS_BUCKET,
         Key=start_key,
@@ -298,7 +304,8 @@ def start_fal_job(video_id, prompt, model, start_image_bytes, end_image_bytes=No
     end_url = None
     if end_image_bytes:
         end_key = f"temp-images/{video_id}-end.jpg"
-        print(f"Uploading end image to S3: {end_key} ({len(end_image_bytes)} bytes)")
+        print(
+            f"Uploading end image to S3: {end_key} ({len(end_image_bytes)} bytes)")
         s3_client.put_object(
             Bucket=VIDEOS_BUCKET,
             Key=end_key,
@@ -311,7 +318,8 @@ def start_fal_job(video_id, prompt, model, start_image_bytes, end_image_bytes=No
             ExpiresIn=3600
         )
 
-    fal_model_id = FAL_MODEL_MAP.get(model, FAL_MODEL_MAP['gemini-veo-31-fast'])
+    fal_model_id = FAL_MODEL_MAP.get(
+        model, FAL_MODEL_MAP['gemini-veo-31-fast'])
 
     if model in KLING_MODELS:
         payload = {
@@ -325,13 +333,14 @@ def start_fal_job(video_id, prompt, model, start_image_bytes, end_image_bytes=No
     else:
         # Veo models accept a single image_url; end image is not supported
         if end_url:
-            print(f"Warning: fal.ai Veo models do not support end images — ignoring end_image for {video_id}")
+            print(
+                f"Warning: fal.ai Veo models do not support end images — ignoring end_image for {video_id}")
         payload = {
             'image_url': start_url,
             'prompt': prompt,
-            'aspect_ratio': '16:9',
+            'aspect_ratio': resolution[0],
             'duration': '8s',
-            'resolution': resolution,
+            'resolution': resolution[1],
             'generate_audio': False,
         }
 
@@ -341,7 +350,8 @@ def start_fal_job(video_id, prompt, model, start_image_bytes, end_image_bytes=No
     }
 
     url = f"{FAL_QUEUE_BASE}/{fal_model_id}"
-    print(f"Calling fal.ai API, model: {fal_model_id}, prompt: {prompt[:80]}...")
+    print(
+        f"Calling fal.ai API, model: {fal_model_id}, prompt: {prompt[:80]}...")
     response = requests.post(url, headers=headers, json=payload)
     print(f"fal.ai response {response.status_code}: {response.text}")
     response.raise_for_status()

@@ -29,6 +29,7 @@ def lambda_handler(event, context):
     video_id = event['videoId']
     task_id = event['jobName']
     provider = event.get('provider', 'evolink')
+    model = event.get('model', '')
     fal_model_id = event.get('falModelId')
     fal_status_url = event.get('falStatusUrl')
     fal_result_url = event.get('falResultUrl')
@@ -53,7 +54,7 @@ def lambda_handler(event, context):
                 if video_url:
                     video_data = download_video(video_url)
                     s3_url = upload_video_to_s3(video_id, video_data)
-                    cleanup_temp_images(video_id)
+                    cleanup_temp_images(video_id, model)
 
                     timestamp = int(time.time() * 1000)
                     videos_table.update_item(
@@ -73,14 +74,14 @@ def lambda_handler(event, context):
                 error_msg = status.get('error') or 'No video URL in completed response'
                 print(f"Job completed with no video URL: {error_msg}")
                 _mark_failed(video_id, error_msg)
-                cleanup_temp_images(video_id)
+                cleanup_temp_images(video_id, model)
                 return {'statusCode': 500, 'videoId': video_id, 'status': 'failed', 'error': error_msg}
 
             if job_status == 'failed':
                 error_msg = status.get('error') or 'Video generation failed'
                 print(f"Job failed: {error_msg}")
                 _mark_failed(video_id, error_msg)
-                cleanup_temp_images(video_id)
+                cleanup_temp_images(video_id, model)
                 return {'statusCode': 500, 'videoId': video_id, 'status': 'failed', 'error': error_msg}
 
             # pending / processing — wait and retry
@@ -91,13 +92,13 @@ def lambda_handler(event, context):
         # Timed out
         print(f"Job timed out for video: {video_id}")
         _mark_failed(video_id, 'Video generation timed out')
-        cleanup_temp_images(video_id)
+        cleanup_temp_images(video_id, model)
         return {'statusCode': 408, 'videoId': video_id, 'status': 'timeout'}
 
     except Exception as e:
         print(f"Error in poller: {str(e)}")
         _mark_failed(video_id, str(e))
-        cleanup_temp_images(video_id)
+        cleanup_temp_images(video_id, model)
         return {'statusCode': 500, 'error': str(e)}
 
 
@@ -134,10 +135,13 @@ def upload_video_to_s3(video_id, video_data):
     return url
 
 
-def cleanup_temp_images(video_id):
+def cleanup_temp_images(video_id, model=''):
     """Delete the short-lived reference images uploaded to S3 before the EvoLink call"""
     if os.environ.get('DEBUG_KEEP_TEMP_IMAGES'):
         print(f"DEBUG_KEEP_TEMP_IMAGES set — skipping cleanup for video {video_id}")
+        return
+    if model.startswith('gemini-veo'):
+        print(f"Skipping cleanup for veo model inspection — video {video_id}")
         return
     for suffix in ('start', 'end'):
         key = f"temp-images/{video_id}-{suffix}.jpg"

@@ -38,7 +38,7 @@ event = {
     "path": "/generate",
     "headers": {"content-type": "application/json"},
     "body": json.dumps({
-        "prompt": "A cat walking on a sunny beach",
+        "prompt": "A girl looks suspiciously turning her eyes from left to right. Her expression is of doubt and unhappiness. Then slowly her expression changes to happiness and joy. She smiles and dances waltz with her baguette.",
         "model": model,
         "image": {"start": image_b64}
     }),

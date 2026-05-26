@@ -25,7 +25,6 @@ body {
   height: 100vh;
   overflow: hidden;
 }
-
 .app {
   height: 100vh;
   width: 100vw;
@@ -172,7 +171,8 @@ body {
   display: block;
   margin-bottom: 0.5rem;
   font-weight: 500;
-  color: var(--text-primary);
+  font-size: 0.9em;
+  color: color-mix(in srgb, var(--text-secondary) 80%, transparent);
 }
 
 .form-group textarea,
@@ -248,7 +248,9 @@ button {
   font-size: 1rem;
   font-weight: 500;
   cursor: pointer;
-  transition: background-color 0.2s, transform 0.1s;
+  transition:
+    background-color 0.2s,
+    transform 0.1s;
 }
 
 button:hover:not(:disabled) {
@@ -348,6 +350,16 @@ button:disabled {
   border-radius: 50%;
 }
 
+.status-text.completed {
+  color: var(--primary-color);
+}
+.status-text.processing {
+  color: var(--secondary-color);
+}
+.status-text.failed {
+  color: var(--error-color);
+  font-weight: bold;
+}
 .video-status span,
 .video-status div {
   font-size: 0.9rem;

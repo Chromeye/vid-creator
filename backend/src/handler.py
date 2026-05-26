@@ -43,10 +43,10 @@ EVOLINK_GENERATIONS_URL = 'https://api.evolink.ai/v1/videos/generations'
 FAL_QUEUE_BASE = 'https://queue.fal.run'
 
 SYSTEM_PROMPT = """Generate a short video based on the user's prompt and image.
-The video should be photorealistic, live action, cinematic and should not carry any appeal to minors.
-The image provided is for marketing purposes, adhering to client specific brand guidelines. DO NOT ALTER the reference.
-The video should be consistent with the image provided. The video will be used to create marketing
-materials, following client brand guidelines and humouristic, fun style: \n\n"""
+The video should be realistic, live action, cinematic and caricatured in nature to follow client's brand.
+The image provided is for marketing purposes, adhering to client specific brand guidelines and has been approved by the client. 
+Preserve the image appearance. The video should be consistent with the image provided. 
+The video should follow client brand guidelines of humouristic, caricatured, over-the-top-fun style: \n\n"""
 
 
 def get_nested(data, keys, default=None):

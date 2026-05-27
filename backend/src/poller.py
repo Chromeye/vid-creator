@@ -157,6 +157,7 @@ def _check_fal_status(fal_model_id, request_id, fal_status_url=None, fal_result_
     status_url = fal_status_url or f"{FAL_QUEUE_BASE}/{fal_model_id}/requests/{request_id}/status"
     headers = {'Authorization': f'Key {FAL_API_KEY}'}
     response = requests.get(status_url, headers=headers)
+    print(f"fal.ai status {response.status_code} for {request_id}: {response.text[:500]}")
     response.raise_for_status()
     raw = response.json()
     fal_status = raw.get('status')
@@ -164,14 +165,32 @@ def _check_fal_status(fal_model_id, request_id, fal_status_url=None, fal_result_
     if fal_status == 'COMPLETED':
         result_url = fal_result_url or f"{FAL_QUEUE_BASE}/{fal_model_id}/requests/{request_id}"
         result_response = requests.get(result_url, headers=headers)
-        result_response.raise_for_status()
-        video_url = result_response.json().get('video', {}).get('url')
+        body_text = result_response.text
+        print(f"fal.ai result {result_response.status_code} for {request_id}: {body_text[:1000]}")
+
+        if not result_response.ok:
+            try:
+                detail = result_response.json()
+            except Exception:
+                detail = body_text[:500]
+            err_msg = f'fal result {result_response.status_code}: {detail}'
+            # 422 on the result endpoint almost always means moderation/policy rejection
+            if result_response.status_code == 422:
+                err_msg = f'[likely content policy rejection] {err_msg}'
+            return {'status': 'failed', 'error': err_msg}
+
+        result_json = result_response.json()
+        video_url = (result_json.get('video') or {}).get('url')
+        if not video_url:
+            print(f"fal.ai completed with no video URL. Full payload: {result_json}")
+            return {'status': 'failed', 'error': f'fal completed without video URL: {result_json}'}
         return {'status': 'completed', 'results': [video_url]}
 
     if fal_status in ('IN_QUEUE', 'IN_PROGRESS'):
         return {'status': 'processing'}
 
-    error = raw.get('error') or f'Unexpected fal.ai status: {fal_status}'
+    error = raw.get('error') or f'Unexpected fal.ai status: {fal_status} (full response: {raw})'
+    print(f"fal.ai non-terminal/unexpected status for {request_id}: {raw}")
     return {'status': 'failed', 'error': error}
 
 

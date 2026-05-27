@@ -32,8 +32,8 @@ MODEL_MAP = {
 
 # Internal model key -> fal.ai model endpoint
 FAL_MODEL_MAP = {
-    "gemini-veo-31-fast":      "fal-ai/veo3.1/fast/image-to-video",
-    "gemini-veo-31":           "fal-ai/veo3.1/image-to-video",
+    "gemini-veo-31-fast":      "fal-ai/veo3.1/reference-to-video",
+    "gemini-veo-31":           "fal-ai/veo3.1/reference-to-video",
     "kling-v3-image-to-video": "fal-ai/kling-video/v3/standard/image-to-video"
 }
 
@@ -42,11 +42,16 @@ KLING_MODELS = {'kling-v3-image-to-video'}
 EVOLINK_GENERATIONS_URL = 'https://api.evolink.ai/v1/videos/generations'
 FAL_QUEUE_BASE = 'https://queue.fal.run'
 
-SYSTEM_PROMPT = """Generate a short video based on the user's prompt and image.
-The video should be realistic, live action, cinematic and caricatured in nature to follow client's brand.
-The image provided is for marketing purposes, adhering to client specific brand guidelines and has been approved by the client. 
-Preserve the image appearance. The video should be consistent with the image provided. 
-The video should follow client brand guidelines of humouristic, caricatured, over-the-top-fun style: \n\n"""
+SYSTEM_PROMPT = """Generate a short video based on the user's prompt and reference image.
+
+Style & Aesthetics:
+- The video must look like a practical, live-action production with a highly tactile and physical feel, avoiding any digital or CGI appearance.
+- The character should feature a stylized, comedic caricature aesthetic, seamlessly matching the exaggerated proportions and humorous tone of the provided reference image.
+- Maintain a high-quality, cinematic presentation that matches the lighting, colors, and overall visual appearance of the reference image.
+
+Content Guidelines:
+- The content is entirely lighthearted, whimsical, and intended for broad marketing appeal. 
+- Focus heavily on the playful, joyful, and comedic elements of the performance. \n\n"""
 
 
 def get_nested(data, keys, default=None):
@@ -331,17 +336,16 @@ def start_fal_job(video_id, prompt, model, start_image_bytes, end_image_bytes=No
         if end_url:
             payload['end_image_url'] = end_url
     else:
-        # Veo models accept a single image_url; end image is not supported
+        urls = [start_url]
         if end_url:
-            print(
-                f"Warning: fal.ai Veo models do not support end images — ignoring end_image for {video_id}")
+            urls.append(end_url)
         payload = {
-            'image_url': start_url,
+            'image_urls': urls,
             'prompt': prompt,
             'aspect_ratio': resolution[0],
             'duration': '8s',
-            'resolution': resolution[1],
             'generate_audio': False,
+            'safety_tolerance': '6'
         }
 
     headers = {

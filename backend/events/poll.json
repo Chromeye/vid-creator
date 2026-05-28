@@ -1,6 +1,6 @@
 {
-  "videoId": "05e81b02-0a27-48cd-8292-5b2437b1e62b",
-  "jobName": "task-unified-1779353380-0ut6tzq1",
-  "provider": "evolink",
+  "videoId": "e5e0bfc8-0790-445e-88de-f7dad0f703ef",
+  "jobName": "models/veo-3.1-fast-generate-preview/operations/m7a286c3hvqw",
+  "provider": "gemini",
   "model": "gemini-veo-31-fast"
 }

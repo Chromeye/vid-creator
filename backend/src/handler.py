@@ -16,6 +16,7 @@ lambda_client = boto3.client('lambda')
 # Environment variables
 VIDEOS_BUCKET = os.environ['VIDEOS_BUCKET']
 VIDEOS_TABLE = os.environ['VIDEOS_TABLE']
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
 EVOLINK_API_KEY = os.environ.get('EVOLINK_API_KEY', '')
 FAL_API_KEY = os.environ.get('FAL_API_KEY', '')
 INFERENCE_PROVIDER = os.environ.get('INFERENCE_PROVIDER', 'evolink')
@@ -39,19 +40,20 @@ FAL_MODEL_MAP = {
 
 KLING_MODELS = {'kling-v3-image-to-video'}
 
+# Veo models go directly to Google Gemini (fal/evolink content filters reject them).
+GEMINI_MODEL_MAP = {
+    "gemini-veo-31-fast": "veo-3.1-fast-generate-preview",
+    "gemini-veo-31":      "veo-3.1-generate-preview",
+}
+GEMINI_MODELS = set(GEMINI_MODEL_MAP.keys())
+
 EVOLINK_GENERATIONS_URL = 'https://api.evolink.ai/v1/videos/generations'
 FAL_QUEUE_BASE = 'https://queue.fal.run'
+GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta'
 
-SYSTEM_PROMPT = """Generate a short video based on the user's prompt and reference image.
-
-Style & Aesthetics:
-- The video must look like a practical, live-action production with a highly tactile and physical feel, avoiding any digital or CGI appearance.
-- The character should feature a stylized, comedic caricature aesthetic, seamlessly matching the exaggerated proportions and humorous tone of the provided reference image.
-- Maintain a high-quality, cinematic presentation that matches the lighting, colors, and overall visual appearance of the reference image.
-
-Content Guidelines:
-- The content is entirely lighthearted, whimsical, and intended for broad marketing appeal. 
-- Focus heavily on the playful, joyful, and comedic elements of the performance. \n\n"""
+SYSTEM_PROMPT = """Use the reference image(s) to generate a video that matches the style and content of the reference. 
+The video will be used in a marketing campaign and should be visually engaging and cinematic quality. Do not use CGI.
+Apply the user's prompt adjusting the video accordingly. \n\n"""
 
 
 def get_nested(data, keys, default=None):
@@ -121,28 +123,37 @@ def handle_generate_video(event, context):
         if not image_dict or not image_dict.get('start'):
             return create_response(400, {'error': 'Start image is required'})
 
-        # Strip data: URL prefix, then decode to raw bytes for S3 upload
-        start_raw = image_dict['start']
-        if start_raw.startswith('data:'):
-            start_raw = start_raw.split(',', 1)[1]
-        start_image_bytes = base64.b64decode(start_raw)
+        # Strip data: URL prefix; keep base64 string for Gemini, bytes for S3 upload (fal/evolink).
+        start_mime, start_b64 = _parse_data_url(image_dict['start'])
+        start_image_bytes = base64.b64decode(start_b64)
 
+        end_mime = 'image/jpeg'
+        end_b64 = None
         end_image_bytes = None
         if image_dict.get('end'):
-            end_raw = image_dict['end']
-            if end_raw.startswith('data:'):
-                end_raw = end_raw.split(',', 1)[1]
-            end_image_bytes = base64.b64decode(end_raw)
+            end_mime, end_b64 = _parse_data_url(image_dict['end'])
+            end_image_bytes = base64.b64decode(end_b64)
 
         video_id = str(uuid.uuid4())
         timestamp = int(time.time() * 1000)
 
-        full_prompt = SYSTEM_PROMPT + user_prompt
+        full_prompt = SYSTEM_PROMPT + "User prompt:\n\n" + user_prompt
 
         fal_model_id = None
         fal_status_url = None
         fal_result_url = None
-        if INFERENCE_PROVIDER == 'fal':
+        if model in GEMINI_MODELS:
+            # Veo 3.1 only supports 16:9 and 9:16 — reject 1:1 before hitting Gemini.
+            if resolution and resolution[0] not in ('16:9', '9:16'):
+                return create_response(400, {
+                    'error': f"Veo 3.1 does not support aspect ratio '{resolution[0]}'. Use '16:9' or '9:16', or switch to Kling."
+                })
+            # Veo models always go direct to Gemini, regardless of INFERENCE_PROVIDER.
+            task_id = start_gemini_job(
+                full_prompt, model, start_b64, start_mime, end_b64, end_mime, resolution)
+            print(f"Started Gemini job: {task_id} for video: {video_id}")
+            provider = 'gemini'
+        elif INFERENCE_PROVIDER == 'fal':
             task_id, fal_model_id, fal_status_url, fal_result_url = start_fal_job(
                 video_id, full_prompt, model, start_image_bytes, end_image_bytes, resolution)
             print(f"Started fal.ai job: {task_id} for video: {video_id}")
@@ -175,9 +186,10 @@ def handle_generate_video(event, context):
         if poller_function:
             try:
                 poller_payload = {'videoId': video_id,
-                                  'jobName': task_id, 'model': model}
+                                  'jobName': task_id,
+                                  'model': model,
+                                  'provider': provider}
                 if fal_model_id:
-                    poller_payload['provider'] = 'fal'
                     poller_payload['falModelId'] = fal_model_id
                     if fal_status_url:
                         poller_payload['falStatusUrl'] = fal_status_url
@@ -203,6 +215,69 @@ def handle_generate_video(event, context):
         return create_response(500, {'error': str(e)})
 
 
+def _parse_data_url(s):
+    """Return (mime_type, base64_payload) from a data: URL, or ('image/jpeg', raw) otherwise."""
+    if s.startswith('data:'):
+        header, payload = s.split(',', 1)
+        mime = 'image/jpeg'
+        if ':' in header:
+            after_colon = header.split(':', 1)[1]
+            if ';' in after_colon:
+                mime = after_colon.split(';', 1)[0]
+            elif after_colon:
+                mime = after_colon
+        return mime, payload
+    return 'image/jpeg', s
+
+
+def start_gemini_job(prompt, model, start_image_base64, start_mime='image/jpeg',
+                     end_image_base64=None, end_mime='image/jpeg',
+                     resolution=('16:9', '1080p')):
+    """Submit a Veo job directly to the Gemini API and return the operation name."""
+
+    gemini_model_id = GEMINI_MODEL_MAP.get(
+        model, GEMINI_MODEL_MAP['gemini-veo-31-fast'])
+    endpoint = f"{GEMINI_API_BASE}/models/{gemini_model_id}:predictLongRunning"
+
+    headers = {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': GEMINI_API_KEY,
+    }
+
+    instance = {
+        "prompt": prompt,
+        "image": {
+            "bytesBase64Encoded": start_image_base64,
+            "mimeType": start_mime,
+        },
+    }
+    if end_image_base64:
+        instance["lastFrame"] = {
+            "bytesBase64Encoded": end_image_base64,
+            "mimeType": end_mime,
+        }
+
+    aspect_ratio, video_resolution = resolution[0], resolution[1]
+    parameters = {
+        "aspectRatio": aspect_ratio,
+        "negativePrompt": "cartoon, drawing, low quality, 3D",
+        "resolution": video_resolution,
+    }
+
+    print(
+        f"Calling Gemini API, model: {gemini_model_id}, prompt: {prompt[:80]}..., has_end_image: {bool(end_image_base64)}")
+    response = requests.post(
+        endpoint,
+        headers=headers,
+        json={"instances": [instance], "parameters": parameters},
+    )
+    print(f"Gemini response {response.status_code}: {response.text[:500]}")
+    response.raise_for_status()
+    job_name = response.json()['name']
+    print(f"Gemini operation name: {job_name}")
+    return job_name
+
+
 def start_evolink_job(video_id, prompt, model, start_image_bytes, end_image_bytes=None, resolution='1080p'):
     """Upload ref images to S3 temp prefix, build presigned URLs, and submit to EvoLink.ai."""
 
@@ -218,7 +293,7 @@ def start_evolink_job(video_id, prompt, model, start_image_bytes, end_image_byte
     start_url = s3_client.generate_presigned_url(
         'get_object',
         Params={'Bucket': VIDEOS_BUCKET, 'Key': start_key},
-        ExpiresIn=3600
+        ExpiresIn=259200
     )
     print(f"Start image presigned URL: {start_url}")
 
@@ -236,7 +311,7 @@ def start_evolink_job(video_id, prompt, model, start_image_bytes, end_image_byte
         end_url = s3_client.generate_presigned_url(
             'get_object',
             Params={'Bucket': VIDEOS_BUCKET, 'Key': end_key},
-            ExpiresIn=3600
+            ExpiresIn=259200
         )
         print(f"End image presigned URL: {end_url}")
 
@@ -303,7 +378,7 @@ def start_fal_job(video_id, prompt, model, start_image_bytes, end_image_bytes=No
     start_url = s3_client.generate_presigned_url(
         'get_object',
         Params={'Bucket': VIDEOS_BUCKET, 'Key': start_key},
-        ExpiresIn=3600
+        ExpiresIn=259200
     )
 
     end_url = None
@@ -320,7 +395,7 @@ def start_fal_job(video_id, prompt, model, start_image_bytes, end_image_bytes=No
         end_url = s3_client.generate_presigned_url(
             'get_object',
             Params={'Bucket': VIDEOS_BUCKET, 'Key': end_key},
-            ExpiresIn=3600
+            ExpiresIn=259200
         )
 
     fal_model_id = FAL_MODEL_MAP.get(
@@ -343,9 +418,9 @@ def start_fal_job(video_id, prompt, model, start_image_bytes, end_image_bytes=No
             'image_urls': urls,
             'prompt': prompt,
             'aspect_ratio': resolution[0],
+            'resolution': resolution[1],
             'duration': '8s',
-            'generate_audio': False,
-            'safety_tolerance': '6'
+            'generate_audio': False
         }
 
     headers = {

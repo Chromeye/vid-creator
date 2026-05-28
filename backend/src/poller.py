@@ -11,6 +11,7 @@ dynamodb = boto3.resource('dynamodb')
 # Environment variables
 VIDEOS_BUCKET = os.environ['VIDEOS_BUCKET']
 VIDEOS_TABLE = os.environ['VIDEOS_TABLE']
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
 EVOLINK_API_KEY = os.environ.get('EVOLINK_API_KEY', '')
 FAL_API_KEY = os.environ.get('FAL_API_KEY', '')
 
@@ -19,6 +20,7 @@ videos_table = dynamodb.Table(VIDEOS_TABLE)
 
 EVOLINK_TASKS_URL = "https://api.evolink.ai/v1/tasks/"
 FAL_QUEUE_BASE = "https://queue.fal.run"
+GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta"
 
 
 def lambda_handler(event, context):
@@ -40,7 +42,9 @@ def lambda_handler(event, context):
 
     try:
         while poll_count < max_polls:
-            if provider == 'fal':
+            if provider == 'gemini':
+                status = _check_gemini_status(task_id)
+            elif provider == 'fal':
                 status = _check_fal_status(fal_model_id, task_id, fal_status_url, fal_result_url)
             else:
                 status = check_evolink_job_status(task_id)
@@ -52,7 +56,7 @@ def lambda_handler(event, context):
                 video_url = results[0] if results else None
 
                 if video_url:
-                    video_data = download_video(video_url)
+                    video_data = download_video(video_url, provider)
                     s3_url = upload_video_to_s3(video_id, video_data)
                     cleanup_temp_images(video_id, model)
 
@@ -110,10 +114,13 @@ def check_evolink_job_status(task_id):
     return response.json()
 
 
-def download_video(video_url):
-    """Download video from EvoLink CDN (no auth required on result URLs)"""
+def download_video(video_url, provider='evolink'):
+    """Download video bytes. Gemini result URIs require the x-goog-api-key header."""
     print(f"Downloading video from: {video_url}")
-    response = requests.get(video_url, stream=True)
+    headers = {}
+    if provider == 'gemini':
+        headers['x-goog-api-key'] = GEMINI_API_KEY
+    response = requests.get(video_url, headers=headers, stream=True)
     response.raise_for_status()
     return response.content
 
@@ -150,6 +157,50 @@ def cleanup_temp_images(video_id, model=''):
             print(f"Deleted temp image: {key}")
         except Exception as e:
             print(f"Warning: could not delete {key}: {e}")
+
+
+def _check_gemini_status(operation_name):
+    """Poll a Gemini long-running operation and normalize to {status, results, error}."""
+    headers = {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': GEMINI_API_KEY,
+    }
+    url = f"{GEMINI_API_BASE}/{operation_name}"
+    response = requests.get(url, headers=headers)
+    print(f"Gemini status {response.status_code} for {operation_name}: {response.text[:500]}")
+    response.raise_for_status()
+    raw = response.json()
+
+    if not raw.get('done'):
+        return {'status': 'processing'}
+
+    if 'error' in raw:
+        err = raw['error']
+        err_msg = err.get('message') if isinstance(err, dict) else str(err)
+        return {'status': 'failed', 'error': f'Gemini error: {err_msg}'}
+
+    video_url = _gemini_nested(
+        raw,
+        ['response', 'generateVideoResponse', 'generatedSamples', 0, 'video', 'uri'],
+    )
+    if video_url:
+        return {'status': 'completed', 'results': [video_url]}
+
+    filter_reasons = _gemini_nested(
+        raw, ['response', 'generateVideoResponse', 'raiMediaFilteredReasons'])
+    if isinstance(filter_reasons, list):
+        filter_reasons = ', '.join(str(r) for r in filter_reasons)
+    err_msg = filter_reasons or f'Gemini completed without video URL: {raw}'
+    return {'status': 'failed', 'error': err_msg}
+
+
+def _gemini_nested(data, keys, default=None):
+    for key in keys:
+        try:
+            data = data[key]
+        except (KeyError, TypeError, IndexError):
+            return default
+    return data
 
 
 def _check_fal_status(fal_model_id, request_id, fal_status_url=None, fal_result_url=None):

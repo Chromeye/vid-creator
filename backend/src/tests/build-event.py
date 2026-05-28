@@ -38,7 +38,7 @@ event = {
     "path": "/generate",
     "headers": {"content-type": "application/json"},
     "body": json.dumps({
-        "prompt": "A girl looks suspiciously turning her eyes from left to right. Her expression is of doubt and unhappiness. Then slowly her expression changes to happiness and joy. She smiles and dances waltz with her baguette.",
+        "prompt": "A girl looks suspiciously turning her eyes from left to right. At one point her expression changes to happiness and joy. Her favourite team in the World Cup have won! She throws the baguette in the air in celebration and jumps up and down with excitement.",
         "model": model,
         "image": {"start": image_b64}
     }),

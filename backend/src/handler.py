@@ -26,19 +26,22 @@ videos_table = dynamodb.Table(VIDEOS_TABLE)
 
 # Internal model key -> EvoLink model string
 MODEL_MAP = {
-    "gemini-veo-31-fast":      "veo-3.1-fast-generate-preview",
-    "gemini-veo-31":           "veo-3.1-generate-preview",
-    "kling-v3-image-to-video": "kling-v3-image-to-video"
+    "gemini-veo-31-fast":        "veo-3.1-fast-generate-preview",
+    "gemini-veo-31":             "veo-3.1-generate-preview",
+    "kling-v3-image-to-video":   "kling-v3-image-to-video",
+    "seedance-2-image-to-video": "seedance-2.0-image-to-video"
 }
 
 # Internal model key -> fal.ai model endpoint
 FAL_MODEL_MAP = {
-    "gemini-veo-31-fast":      "fal-ai/veo3.1/reference-to-video",
-    "gemini-veo-31":           "fal-ai/veo3.1/reference-to-video",
-    "kling-v3-image-to-video": "fal-ai/kling-video/v3/standard/image-to-video"
+    "gemini-veo-31-fast":        "fal-ai/veo3.1/reference-to-video",
+    "gemini-veo-31":             "fal-ai/veo3.1/reference-to-video",
+    "kling-v3-image-to-video":   "fal-ai/kling-video/v3/standard/image-to-video",
+    "seedance-2-image-to-video": "bytedance/seedance-2.0/image-to-video"
 }
 
 KLING_MODELS = {'kling-v3-image-to-video'}
+SEEDANCE_MODELS = {'seedance-2-image-to-video'}
 
 # Veo models go directly to Google Gemini (fal/evolink content filters reject them).
 GEMINI_MODEL_MAP = {
@@ -329,6 +332,20 @@ def start_evolink_job(video_id, prompt, model, start_image_bytes, end_image_byte
         }
         if end_url:
             payload['image_end'] = end_url
+    elif model in SEEDANCE_MODELS:
+        # Seedance accepts image_urls: 1st = first_frame, 2nd = last_frame
+        image_urls = [start_url]
+        if end_url:
+            image_urls.append(end_url)
+        payload = {
+            'model': evolink_model,
+            'prompt': prompt,
+            'image_urls': image_urls,
+            'aspect_ratio': resolution[0],
+            'quality': resolution[1],
+            'generate_audio': False,
+            'duration': 8
+        }
     else:
         # Veo models use FIRST&LAST for image-to-video (supports 1-2 images per EvoLink docs)
         image_urls = [start_url]
@@ -407,6 +424,17 @@ def start_fal_job(video_id, prompt, model, start_image_bytes, end_image_bytes=No
             'prompt': prompt,
             'duration': '8',
             'generate_audio': False,
+        }
+        if end_url:
+            payload['end_image_url'] = end_url
+    elif model in SEEDANCE_MODELS:
+        payload = {
+            'image_url': start_url,
+            'prompt': prompt,
+            'aspect_ratio': resolution[0],
+            'resolution': resolution[1],
+            'duration': '8',
+            'generate_audio': False
         }
         if end_url:
             payload['end_image_url'] = end_url

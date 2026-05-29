@@ -5,6 +5,9 @@ const VALID_DIMS = {
   '1080x1920': ['9:16', '1080p'],
   '1920x1080': ['16:9', '1080p'],
   '1080x1080': ['1:1', '1080p'],
+  '720x1280':  ['9:16', '720p'],
+  '1280x720':  ['16:9', '720p'],
+  '720x720':   ['1:1',  '720p'],
 };
 
 // Veo 3.1 (Gemini) only accepts 16:9 and 9:16. Kling supports 1:1 as well.
@@ -39,7 +42,7 @@ export default function VideoUploadForm({ onSubmit }) {
       if (!detected) {
         setError((current) => ({
           ...current,
-          [pos]: 'Required: 1080p in 1920x1080 (16:9), 1080x1920 (9:16) or 1080x1080 (1:1)',
+          [pos]: 'Required: 1080p (1920×1080, 1080×1920, 1080×1080) or 720p (1280×720, 720×1280, 720×720)',
         }));
         setImage((current) => ({ ...current, [pos]: null }));
         setPreview((current) => ({ ...current, [pos]: null }));
@@ -149,6 +152,7 @@ export default function VideoUploadForm({ onSubmit }) {
             <option value='gemini-veo-31-fast'>Veo 3.1 Fast</option>
             <option value='gemini-veo-31'>Veo 3.1</option>
             <option value='kling-v3-image-to-video'>Kling 3.0 Standard</option>
+            <option value='seedance-2-image-to-video'>Seedance 2.0</option>
           </select>
         </div>
         <div className='form-group'>
@@ -166,8 +170,8 @@ export default function VideoUploadForm({ onSubmit }) {
 
         <div className='form-group'>
           <label htmlFor='image'>
-            Start frame reference (1920x1080 in 16:9, 1080x1920 in 9:16
-            {isVeoModel(context.data.model) ? '' : ', 1080x1080 in 1:1'}, JPG/PNG)
+            Start frame reference (1080p or 720p in 16:9, 9:16
+            {isVeoModel(context.data.model) ? '' : ', 1:1'}, JPG/PNG)
             {resolution && <span className='resolution-badge'> — {resolution.join(', ')} detected</span>}:
           </label>
           <input id='image' type='file' accept='image/jpeg,image/png' onChange={handleImageChange} disabled={isSubmitting} required />
@@ -193,7 +197,7 @@ export default function VideoUploadForm({ onSubmit }) {
 
         {showFinalFrame && (
           <div className='form-group'>
-            <label htmlFor='imageEnd'>Final frame reference (must match start: {resolution ? resolution.join(', ') : (isVeoModel(context.data.model) ? '1080p (9:16, 16:9)' : '1080p (9:16, 16:9, 1:1)')}, JPG/PNG):</label>
+            <label htmlFor='imageEnd'>Final frame reference (must match start: {resolution ? resolution.join(', ') : (isVeoModel(context.data.model) ? '1080p or 720p (9:16, 16:9)' : '1080p or 720p (9:16, 16:9, 1:1)')}, JPG/PNG):</label>
             <input id='imageEnd' type='file' accept='image/jpeg,image/png' onChange={(e) => handleImageChange(e, 'end')} disabled={isSubmitting || !image.start} required />
             {error.end && <p className='error-message'>{error.end}</p>}
           </div>

@@ -22,6 +22,8 @@ export const getModelLabel = (model) => {
       return { name: 'Veo 3 Fast', className: '' };
     case 'kling-v3-image-to-video':
       return { name: 'Kling 3.0 Standard', className: '' };
+    case 'seedance-2-image-to-video':
+      return { name: 'Seedance 2.0', className: '' };
     default:
       return { name: model, className: '' };
   }
